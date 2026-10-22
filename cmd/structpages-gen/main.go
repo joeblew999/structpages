@@ -12,10 +12,12 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"flag"
 	"fmt"
 	"go/ast"
 	"go/format"
+	"go/parser"
 	"go/token"
 	"go/types"
 	"os"
@@ -51,15 +53,7 @@ func main() {
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |
-			packages.NeedTypes | packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports,
-		Tests: *test,
-	}
-	if *tags != "" {
-		cfg.BuildFlags = []string{"-tags=" + *tags}
-	}
-	pkgs, err := packages.Load(cfg, patterns...)
+	pkgs, err := load(patterns, *test, *tags)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "structpages-gen:", err)
 		os.Exit(2)
@@ -76,13 +70,11 @@ func main() {
 		}
 		g := &gen{pkg: p, files: files, routed: routed, inTest: p.ID != p.PkgPath}
 		src, err := g.generate()
+		if err == nil {
+			err = write(out, src)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "structpages-gen: %s: %v\n", p.ID, err)
-			failed = true
-			continue
-		}
-		if err := write(out, src); err != nil {
-			fmt.Fprintln(os.Stderr, "structpages-gen:", err)
 			failed = true
 		}
 	}
@@ -91,10 +83,30 @@ func main() {
 	}
 }
 
+func load(patterns []string, test bool, tags string) ([]*packages.Package, error) {
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedSyntax |
+			packages.NeedTypes | packages.NeedTypesInfo | packages.NeedDeps | packages.NeedImports,
+		Tests: test,
+		// Its own earlier output is left out: it may be stale.
+		ParseFile: func(fset *token.FileSet, filename string, src []byte) (*ast.File, error) {
+			mode := parser.AllErrors | parser.ParseComments
+			if strings.HasPrefix(filepath.Base(filename), "structpages_tables") && bytes.Contains(src, []byte(header)) {
+				mode = parser.PackageClauseOnly
+			}
+			return parser.ParseFile(fset, filename, src, mode)
+		},
+	}
+	if tags != "" {
+		cfg.BuildFlags = []string{"-tags=" + tags}
+	}
+	return packages.Load(cfg, patterns...)
+}
+
 // coveredFiles returns the files of p whose declarations p's table covers,
 // and the table's path: a package's own files, its _test.go files in the
 // package's test variant, and an external test package's files.
-func coveredFiles(p *packages.Package) (map[string]bool, string) {
+func coveredFiles(p *packages.Package) (files map[string]bool, out string) {
 	if p.PkgPath == tablesPath || strings.HasSuffix(p.ID, ".test") || len(p.GoFiles) == 0 {
 		return nil, ""
 	}
@@ -102,8 +114,7 @@ func coveredFiles(p *packages.Package) (map[string]bool, string) {
 	if p.PkgPath == structpagesPath && !inTest {
 		return nil, "" // the library declares no pages; its tests do
 	}
-	external := inTest && strings.HasSuffix(p.Name, "_test")
-	files := map[string]bool{}
+	files = map[string]bool{}
 	for _, f := range p.GoFiles {
 		if strings.HasSuffix(f, "_test.go") == inTest {
 			files[f] = true
@@ -114,7 +125,7 @@ func coveredFiles(p *packages.Package) (map[string]bool, string) {
 	}
 	name := "structpages_tables.go"
 	switch {
-	case external:
+	case inTest && strings.HasSuffix(p.Name, "_test"):
 		name = "structpages_tables_external_test.go"
 	case inTest:
 		name = "structpages_tables_test.go"
@@ -130,16 +141,14 @@ func routedTypes(pkgs []*packages.Package) map[string]bool {
 	for _, p := range pkgs {
 		for _, f := range p.Syntax {
 			ast.Inspect(f, func(n ast.Node) bool {
-				st, ok := n.(*ast.StructType)
-				if !ok {
-					return true
-				}
-				for _, field := range st.Fields.List {
-					if field.Tag == nil || !hasRoute(field.Tag.Value) {
-						continue
-					}
-					if tn := namedObj(p.TypesInfo.TypeOf(field.Type)); tn != nil && tn.Pkg() != nil {
-						routed[typeKey(tn)] = true
+				if st, ok := n.(*ast.StructType); ok {
+					for _, field := range st.Fields.List {
+						if field.Tag == nil || !hasRoute(field.Tag.Value) {
+							continue
+						}
+						if tn := namedObj(p.TypesInfo.TypeOf(field.Type)); tn != nil && tn.Pkg() != nil {
+							routed[typeKey(tn)] = true
+						}
 					}
 				}
 				return true
@@ -187,8 +196,8 @@ func (g *gen) covered(pos token.Pos) bool {
 	return g.files[g.pkg.Fset.Position(pos).Filename]
 }
 
-func (g *gen) warn(pos token.Pos, format string, args ...any) {
-	g.warnings = append(g.warnings, fmt.Sprintf("%s: %s", g.pkg.Fset.Position(pos), fmt.Sprintf(format, args...)))
+func (g *gen) warn(pos token.Pos, msg string, args ...any) {
+	g.warnings = append(g.warnings, fmt.Sprintf("%s: %s", g.pkg.Fset.Position(pos), fmt.Sprintf(msg, args...)))
 }
 
 // pageType is one page type and its two method sets.
@@ -211,7 +220,6 @@ func (g *gen) generate() ([]byte, error) {
 	for _, name := range g.pkg.Types.Scope().Names() {
 		g.names[name] = true
 	}
-
 	var pages []pageType
 	var funcs []*types.Func
 	for _, f := range g.pkg.Syntax {
@@ -221,34 +229,10 @@ func (g *gen) generate() ([]byte, error) {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.GenDecl:
-				for _, s := range d.Specs {
-					ts, ok := s.(*ast.TypeSpec)
-					if !ok || ts.Assign.IsValid() {
-						continue
-					}
-					tn, _ := g.pkg.TypesInfo.Defs[ts.Name].(*types.TypeName)
-					if tn == nil || !g.isPage(tn) {
-						continue
-					}
-					if ts.TypeParams != nil {
-						g.warn(ts.Pos(), "generic type %s: tables builds can't list or call its methods", tn.Name())
-						continue
-					}
-					if pt, ok := g.pageType(tn); ok {
-						pages = append(pages, pt)
-					}
-				}
+				pages = append(pages, g.pageTypes(d)...)
 			case *ast.FuncDecl:
-				fn, _ := g.pkg.TypesInfo.Defs[d.Name].(*types.Func)
-				if fn == nil || d.Recv != nil || d.Type.TypeParams != nil {
-					continue
-				}
-				sig := fn.Type().(*types.Signature)
-				if sig.Results().Len() == 1 && isComponent(sig.Results().At(0).Type()) {
+				if fn := g.funcDecl(d); fn != nil {
 					funcs = append(funcs, fn)
-				}
-				if isRequestArg(sig) {
-					g.addFuncType(sig, d.Pos())
 				}
 			}
 		}
@@ -269,6 +253,46 @@ func (g *gen) generate() ([]byte, error) {
 	return g.file(pages, funcs)
 }
 
+// pageTypes are the page types d declares.
+func (g *gen) pageTypes(d *ast.GenDecl) []pageType {
+	var pages []pageType
+	for _, s := range d.Specs {
+		ts, ok := s.(*ast.TypeSpec)
+		if !ok || ts.Assign.IsValid() {
+			continue
+		}
+		tn, _ := g.pkg.TypesInfo.Defs[ts.Name].(*types.TypeName)
+		if tn == nil || !g.isPage(tn) {
+			continue
+		}
+		if ts.TypeParams != nil {
+			g.warn(ts.Pos(), "generic type %s: tables builds can't list or call its methods", tn.Name())
+			continue
+		}
+		if pt, ok := g.pageType(tn); ok {
+			pages = append(pages, pt)
+		}
+	}
+	return pages
+}
+
+// funcDecl adds d's type when it is a request-arg provider, and returns it
+// when it is a standalone component.
+func (g *gen) funcDecl(d *ast.FuncDecl) *types.Func {
+	fn, _ := g.pkg.TypesInfo.Defs[d.Name].(*types.Func)
+	if fn == nil || d.Recv != nil || d.Type.TypeParams != nil {
+		return nil
+	}
+	sig := fn.Type().(*types.Signature)
+	if isRequestArg(sig) {
+		g.addFuncType(sig, d.Pos())
+	}
+	if sig.Results().Len() == 1 && isComponent(sig.Results().At(0).Type()) {
+		return fn
+	}
+	return nil
+}
+
 // isPage reports whether tn, a struct type declared in the package, is a
 // page: it has route-tagged fields, is the type of one, or declares a page
 // method or a component. Tests build pages in more ways, so in test files
@@ -281,7 +305,8 @@ func (g *gen) isPage(tn *types.TypeName) bool {
 	if !ok {
 		return false
 	}
-	if g.inTest && types.NewMethodSet(types.NewPointer(tn.Type())).Len() > 0 {
+	ms := types.NewMethodSet(types.NewPointer(tn.Type()))
+	if g.inTest && ms.Len() > 0 {
 		return true
 	}
 	for i := range st.NumFields() {
@@ -289,18 +314,15 @@ func (g *gen) isPage(tn *types.TypeName) bool {
 			return true
 		}
 	}
-	ms := types.NewMethodSet(types.NewPointer(tn.Type()))
 	for i := range ms.Len() {
 		fn := ms.At(i).Obj().(*types.Func)
 		if !fn.Exported() {
 			continue
 		}
-		name := fn.Name()
-		if slices.Contains(pageMethods, name) || strings.HasSuffix(name, "Props") {
+		if slices.Contains(pageMethods, fn.Name()) || strings.HasSuffix(fn.Name(), "Props") {
 			return true
 		}
-		sig := fn.Type().(*types.Signature)
-		if sig.Results().Len() == 1 && isComponent(sig.Results().At(0).Type()) {
+		if sig := fn.Type().(*types.Signature); sig.Results().Len() == 1 && isComponent(sig.Results().At(0).Type()) {
 			return true
 		}
 	}
@@ -308,59 +330,65 @@ func (g *gen) isPage(tn *types.TypeName) bool {
 }
 
 // pageType lists tn's methods on the value and the pointer type, as
-// reflect would, and adds their function types. Its own unexported methods
-// are listed too: reflect doesn't list them, but ID and RenderTarget.Is
-// name them when a method expression is passed.
+// reflect would, and adds their function types.
 func (g *gen) pageType(tn *types.TypeName) (pageType, bool) {
-	pt := pageType{obj: tn}
-	for _, ptr := range []bool{false, true} {
-		recv := tn.Type()
-		if ptr {
-			recv = types.NewPointer(recv)
-		}
-		ms := types.NewMethodSet(recv)
-		var list []method
-		for i := range ms.Len() {
-			sel := ms.At(i)
-			fn := sel.Obj().(*types.Func)
-			embedded := len(sel.Index()) > 1
-			if !fn.Exported() && (embedded || fn.Pkg() != g.pkg.Types) {
-				continue
-			}
-			sig := fn.Type().(*types.Signature)
-			_, ptrRecv := sig.Recv().Type().(*types.Pointer)
-			m := method{
-				name:     fn.Name(),
-				sig:      withReceiver(recv, sig),
-				embedded: embedded,
-				// Through the pointer type, a method declared on the
-				// value type is an autogenerated wrapper too.
-				promoted: embedded || (ptr && !ptrRecv),
-			}
-			// structpages never calls a promoted method, so one whose type
-			// can't be written here is listed without it.
-			if why := g.unnameable(m.sig); why == "" {
-				g.addFuncType(m.sig, tn.Pos())
-			} else if !embedded {
-				g.warn(tn.Pos(), "page type %s: method %s: %s", tn.Name(), fn.Name(), why)
-				return pageType{}, false
-			}
-			list = append(list, m)
-		}
-		sort.Slice(list, func(i, j int) bool { return list[i].name < list[j].name })
-		if ptr {
-			pt.pointer = list
-		} else {
-			pt.value = list
-		}
+	value, ok := g.methods(tn, false)
+	if !ok {
+		return pageType{}, false
 	}
-	return pt, true
+	pointer, ok := g.methods(tn, true)
+	if !ok {
+		return pageType{}, false
+	}
+	return pageType{obj: tn, value: value, pointer: pointer}, true
+}
+
+// methods lists the method set of tn, or of *tn, sorted by name. Its own
+// unexported methods are listed too: reflect doesn't list them, but ID and
+// RenderTarget.Is name them when a method expression is passed.
+func (g *gen) methods(tn *types.TypeName, ptr bool) ([]method, bool) {
+	recv := tn.Type()
+	if ptr {
+		recv = types.NewPointer(recv)
+	}
+	ms := types.NewMethodSet(recv)
+	list := make([]method, 0, ms.Len())
+	for i := range ms.Len() {
+		sel := ms.At(i)
+		fn := sel.Obj().(*types.Func)
+		embedded := len(sel.Index()) > 1
+		if !fn.Exported() && (embedded || fn.Pkg() != g.pkg.Types) {
+			continue
+		}
+		sig := fn.Type().(*types.Signature)
+		_, ptrRecv := sig.Recv().Type().(*types.Pointer)
+		m := method{
+			name:     fn.Name(),
+			sig:      withReceiver(recv, sig),
+			embedded: embedded,
+			// Through the pointer type, a method declared on the value
+			// type is an autogenerated wrapper too.
+			promoted: embedded || (ptr && !ptrRecv),
+		}
+		// structpages never calls a promoted method: it is listed by name.
+		if !embedded {
+			if why := g.unnameable(m.sig); why != "" {
+				g.warn(tn.Pos(), "page type %s: method %s: %s", tn.Name(), fn.Name(), why)
+				return nil, false
+			}
+			g.addFuncType(m.sig, tn.Pos())
+		}
+		list = append(list, m)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].name < list[j].name })
+	return list, true
 }
 
 // withReceiver is sig with recv as its first parameter: a method
 // expression's type.
 func withReceiver(recv types.Type, sig *types.Signature) *types.Signature {
-	params := []*types.Var{types.NewParam(token.NoPos, nil, "", recv)}
+	params := make([]*types.Var, 0, 1+sig.Params().Len())
+	params = append(params, types.NewParam(token.NoPos, nil, "", recv))
 	for i := range sig.Params().Len() {
 		params = append(params, types.NewParam(token.NoPos, nil, "", sig.Params().At(i).Type()))
 	}
@@ -390,24 +418,7 @@ func (g *gen) unnameable(t types.Type) string {
 	case *types.Basic:
 		return ""
 	case *types.Named:
-		obj := t.Obj()
-		if obj.Pkg() != nil {
-			if obj.Parent() != obj.Pkg().Scope() {
-				return obj.Name() + " is declared inside a function"
-			}
-			if obj.Pkg() != g.pkg.Types && obj.Pkg().Path() != g.pkg.PkgPath && !obj.Exported() {
-				return obj.Name() + " is unexported in " + obj.Pkg().Path()
-			}
-		}
-		if t.TypeParams().Len() > 0 && t.TypeArgs().Len() == 0 {
-			return obj.Name() + " is generic"
-		}
-		for i := range t.TypeArgs().Len() {
-			if why := g.unnameable(t.TypeArgs().At(i)); why != "" {
-				return why
-			}
-		}
-		return ""
+		return g.unnameableNamed(t)
 	case *types.Alias:
 		return g.unnameable(types.Unalias(t))
 	case *types.TypeParam:
@@ -421,48 +432,76 @@ func (g *gen) unnameable(t types.Type) string {
 	case *types.Chan:
 		return g.unnameable(t.Elem())
 	case *types.Map:
-		if why := g.unnameable(t.Key()); why != "" {
-			return why
-		}
-		return g.unnameable(t.Elem())
+		return cmp.Or(g.unnameable(t.Key()), g.unnameable(t.Elem()))
 	case *types.Signature:
-		for _, tup := range []*types.Tuple{t.Params(), t.Results()} {
-			for i := range tup.Len() {
-				if why := g.unnameable(tup.At(i).Type()); why != "" {
-					return why
-				}
-			}
-		}
-		return ""
+		return cmp.Or(g.unnameableTuple(t.Params()), g.unnameableTuple(t.Results()))
 	case *types.Struct:
-		for i := range t.NumFields() {
-			f := t.Field(i)
-			if !f.Exported() && f.Pkg() != g.pkg.Types {
-				return "a struct type with unexported fields of another package"
-			}
-			if why := g.unnameable(f.Type()); why != "" {
-				return why
-			}
-		}
-		return ""
+		return g.unnameableStruct(t)
 	case *types.Interface:
-		for i := range t.NumExplicitMethods() {
-			m := t.ExplicitMethod(i)
-			if !m.Exported() && m.Pkg() != g.pkg.Types {
-				return "an interface type with unexported methods of another package"
-			}
-			if why := g.unnameable(m.Type()); why != "" {
-				return why
-			}
-		}
-		for i := range t.NumEmbeddeds() {
-			if why := g.unnameable(t.EmbeddedType(i)); why != "" {
-				return why
-			}
-		}
-		return ""
+		return g.unnameableInterface(t)
 	}
 	return fmt.Sprintf("unsupported type %s", t)
+}
+
+func (g *gen) unnameableNamed(t *types.Named) string {
+	obj := t.Obj()
+	if obj.Pkg() != nil {
+		if obj.Parent() != obj.Pkg().Scope() {
+			return obj.Name() + " is declared inside a function"
+		}
+		if obj.Pkg() != g.pkg.Types && obj.Pkg().Path() != g.pkg.PkgPath && !obj.Exported() {
+			return obj.Name() + " is unexported in " + obj.Pkg().Path()
+		}
+	}
+	if t.TypeParams().Len() > 0 && t.TypeArgs().Len() == 0 {
+		return obj.Name() + " is generic"
+	}
+	for i := range t.TypeArgs().Len() {
+		if why := g.unnameable(t.TypeArgs().At(i)); why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
+func (g *gen) unnameableTuple(t *types.Tuple) string {
+	for i := range t.Len() {
+		if why := g.unnameable(t.At(i).Type()); why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
+func (g *gen) unnameableStruct(t *types.Struct) string {
+	for i := range t.NumFields() {
+		f := t.Field(i)
+		if !f.Exported() && f.Pkg() != g.pkg.Types {
+			return "a struct type with unexported fields of another package"
+		}
+		if why := g.unnameable(f.Type()); why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
+func (g *gen) unnameableInterface(t *types.Interface) string {
+	for i := range t.NumExplicitMethods() {
+		m := t.ExplicitMethod(i)
+		if !m.Exported() && m.Pkg() != g.pkg.Types {
+			return "an interface type with unexported methods of another package"
+		}
+		if why := g.unnameable(m.Type()); why != "" {
+			return why
+		}
+	}
+	for i := range t.NumEmbeddeds() {
+		if why := g.unnameable(t.EmbeddedType(i)); why != "" {
+			return why
+		}
+	}
+	return ""
 }
 
 // isComponent reports whether t has Render(context.Context, io.Writer) error.
@@ -520,71 +559,41 @@ func (g *gen) importName(path, name string) string {
 
 func (g *gen) typ(t types.Type) string { return types.TypeString(t, g.qualifier) }
 
-func (g *gen) file(pages []pageType, funcs []*types.Func) ([]byte, error) {
-	reflectName := g.importName("reflect", "reflect")
-	tablesName := g.importName(tablesPath, "tables")
-	var body bytes.Buffer
-	w := func(format string, args ...any) { fmt.Fprintf(&body, format, args...) }
+// writer writes the generated file's init function.
+type writer struct {
+	g                       *gen
+	buf                     bytes.Buffer
+	reflectName, tablesName string
+}
 
-	w("func init() {\n")
-	if len(g.funcTypes) > 0 {
-		keys := make([]string, 0, len(g.funcTypes))
-		for k := range g.funcTypes {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		w("%s.AddFuncTypes(\n", tablesName)
-		for _, k := range keys {
-			g.funcType(w, reflectName, tablesName, g.funcTypes[k])
-		}
-		w(")\n")
-	}
+func (w *writer) printf(msg string, args ...any) { fmt.Fprintf(&w.buf, msg, args...) }
+
+func (g *gen) file(pages []pageType, funcs []*types.Func) ([]byte, error) {
+	w := &writer{g: g, reflectName: g.importName("reflect", "reflect"), tablesName: g.importName(tablesPath, "tables")}
+	w.printf("func init() {\n")
+	w.writeFuncTypes()
 	sort.Slice(pages, func(i, j int) bool { return pages[i].obj.Name() < pages[j].obj.Name() })
 	for _, pt := range pages {
-		for _, ptr := range []bool{false, true} {
-			list, recv := pt.value, pt.obj.Name()
-			if ptr {
-				list, recv = pt.pointer, "*"+recv
-			}
-			if len(list) == 0 {
-				continue
-			}
-			w("%s.AddMethods(%s.TypeFor[%s](),\n", tablesName, reflectName, recv)
-			for _, m := range list {
-				expr := recv + "." + m.name
-				if ptr {
-					expr = "(" + recv + ")." + m.name
-				}
-				w("%s.Method{Name: %q, Expr: %s", tablesName, m.name, expr)
-				if !m.embedded {
-					// A method promoted through an embedded nil pointer
-					// can't be bound on new(T); it is never a component.
-					w(", Bound: new(%s).%s", pt.obj.Name(), m.name)
-				}
-				if m.promoted {
-					w(", Promoted: true")
-				}
-				w("},\n")
-			}
-			w(")\n")
-		}
+		w.writeMethods(pt, false)
+		w.writeMethods(pt, true)
 	}
-	if len(funcs) > 0 {
-		sort.Slice(funcs, func(i, j int) bool { return funcs[i].Name() < funcs[j].Name() })
-		path := g.pkg.PkgPath
-		if g.pkg.Name == "main" {
-			path = "main"
-		}
-		w("%s.AddFunctions(%q,\n", tablesName, path)
-		for _, fn := range funcs {
-			w("%s.Function{Name: %q, Func: %s},\n", tablesName, fn.Name(), fn.Name())
-		}
-		w(")\n")
-	}
-	w("}\n")
+	w.writeFunctions(funcs)
+	w.printf("}\n")
 
 	var out bytes.Buffer
-	out.WriteString(buildTag + "\n" + header + "\npackage " + g.pkg.Name + "\n\nimport (\n")
+	out.WriteString(buildTag + "\n" + header + "\npackage " + g.pkg.Name + "\n\n")
+	g.writeImports(&out)
+	out.Write(w.buf.Bytes())
+	src, err := format.Source(out.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("formatting the generated file: %w\n%s", err, out.Bytes())
+	}
+	return src, nil
+}
+
+// writeImports writes the import block: the standard library, then the
+// rest.
+func (g *gen) writeImports(out *bytes.Buffer) {
 	var std, others []string
 	for p := range g.imports {
 		if strings.Contains(strings.Split(p, "/")[0], ".") {
@@ -595,73 +604,135 @@ func (g *gen) file(pages []pageType, funcs []*types.Func) ([]byte, error) {
 	}
 	sort.Strings(std)
 	sort.Strings(others)
+	out.WriteString("import (\n")
 	for i, group := range [][]string{std, others} {
 		if i > 0 && len(std) > 0 && len(others) > 0 {
 			out.WriteString("\n")
 		}
 		for _, p := range group {
 			if n := g.imports[p]; n != filepath.Base(p) {
-				fmt.Fprintf(&out, "%s %q\n", n, p)
+				fmt.Fprintf(out, "%s %q\n", n, p)
 			} else {
-				fmt.Fprintf(&out, "%q\n", p)
+				fmt.Fprintf(out, "%q\n", p)
 			}
 		}
 	}
 	out.WriteString(")\n\n")
-	out.Write(body.Bytes())
-	src, err := format.Source(out.Bytes())
-	if err != nil {
-		return nil, fmt.Errorf("formatting the generated file: %w\n%s", err, out.Bytes())
-	}
-	return src, nil
 }
 
-// funcType writes sig's table: its types and a call that converts the
+func (w *writer) writeFuncTypes() {
+	if len(w.g.funcTypes) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(w.g.funcTypes))
+	for k := range w.g.funcTypes {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	w.printf("%s.AddFuncTypes(\n", w.tablesName)
+	for _, k := range keys {
+		w.writeFuncType(w.g.funcTypes[k])
+	}
+	w.printf(")\n")
+}
+
+// writeFuncType writes sig's table: its types and a call that converts the
 // arguments and results as reflect.Value.Call does.
-func (g *gen) funcType(w func(string, ...any), reflectName, tablesName string, sig *types.Signature) {
-	ft := g.typ(sig)
-	typeList := func(t *types.Tuple) string {
-		var b strings.Builder
-		for i := range t.Len() {
-			fmt.Fprintf(&b, "%s.TypeFor[%s](), ", reflectName, g.typ(t.At(i).Type()))
-		}
-		return strings.TrimSuffix(b.String(), ", ")
-	}
+func (w *writer) writeFuncType(sig *types.Signature) {
+	ft := w.g.typ(sig)
 	params, results := sig.Params(), sig.Results()
-	w("%s.FuncType{\n", tablesName)
-	w("Type: %s.TypeFor[%s](),\n", reflectName, ft)
-	w("In: []%s.Type{%s},\n", reflectName, typeList(params))
-	w("Out: []%s.Type{%s},\n", reflectName, typeList(results))
+	w.printf("%s.FuncType{\n", w.tablesName)
+	w.printf("Type: %s.TypeFor[%s](),\n", w.reflectName, ft)
+	w.printf("In: []%s.Type{%s},\n", w.reflectName, w.typeList(params))
+	w.printf("Out: []%s.Type{%s},\n", w.reflectName, w.typeList(results))
 	if sig.Variadic() {
-		w("Variadic: true,\n")
+		w.printf("Variadic: true,\n")
 	}
-	w("Call: func(fn %s.Value, in []%s.Value) []%s.Value {\n", reflectName, reflectName, reflectName)
-	var args []string
+	w.printf("Call: func(fn %s.Value, in []%s.Value) []%s.Value {\n", w.reflectName, w.reflectName, w.reflectName)
 	n := params.Len()
+	args := make([]string, 0, n)
 	for i := range n {
 		pt := params.At(i).Type()
 		if sig.Variadic() && i == n-1 {
-			elem := g.typ(pt.(*types.Slice).Elem())
-			w("rest := make([]%s, len(in)-%d)\n", elem, n-1)
-			w("for i, v := range in[%d:] {\nrest[i] = %s.Arg[%s](v)\n}\n", n-1, tablesName, elem)
+			elem := w.g.typ(pt.(*types.Slice).Elem())
+			w.printf("rest := make([]%s, len(in)-%d)\n", elem, n-1)
+			w.printf("for i, v := range in[%d:] {\nrest[i] = %s.Arg[%s](v)\n}\n", n-1, w.tablesName, elem)
 			args = append(args, "rest...")
 			continue
 		}
-		args = append(args, fmt.Sprintf("%s.Arg[%s](in[%d])", tablesName, g.typ(pt), i))
+		args = append(args, fmt.Sprintf("%s.Arg[%s](in[%d])", w.tablesName, w.g.typ(pt), i))
 	}
 	call := fmt.Sprintf("fn.Interface().(%s)(%s)", ft, strings.Join(args, ", "))
 	if results.Len() == 0 {
-		w("%s\nreturn nil\n", call)
+		w.printf("%s\nreturn nil\n", call)
 	} else {
-		var rs, vs []string
-		for i := range results.Len() {
-			rs = append(rs, "r"+strconv.Itoa(i))
-			vs = append(vs, fmt.Sprintf("%s.Result(r%d)", tablesName, i))
+		rs := make([]string, results.Len())
+		vs := make([]string, results.Len())
+		for i := range rs {
+			rs[i] = "r" + strconv.Itoa(i)
+			vs[i] = fmt.Sprintf("%s.Result(r%d)", w.tablesName, i)
 		}
-		w("%s := %s\n", strings.Join(rs, ", "), call)
-		w("return []%s.Value{%s}\n", reflectName, strings.Join(vs, ", "))
+		w.printf("%s := %s\n", strings.Join(rs, ", "), call)
+		w.printf("return []%s.Value{%s}\n", w.reflectName, strings.Join(vs, ", "))
 	}
-	w("},\n},\n")
+	w.printf("},\n},\n")
+}
+
+func (w *writer) typeList(t *types.Tuple) string {
+	ts := make([]string, t.Len())
+	for i := range ts {
+		ts[i] = fmt.Sprintf("%s.TypeFor[%s]()", w.reflectName, w.g.typ(t.At(i).Type()))
+	}
+	return strings.Join(ts, ", ")
+}
+
+// writeMethods writes the method set of pt's type, or of a pointer to it.
+func (w *writer) writeMethods(pt pageType, ptr bool) {
+	list, recv := pt.value, pt.obj.Name()
+	if ptr {
+		list, recv = pt.pointer, "*"+recv
+	}
+	if len(list) == 0 {
+		return
+	}
+	w.printf("%s.AddMethods(%s.TypeFor[%s](),\n", w.tablesName, w.reflectName, recv)
+	for _, m := range list {
+		if m.embedded {
+			// structpages only skips a promoted method or finds it by
+			// name. Its expression could name a method TinyGo's own
+			// standard library lacks (testing.TB's, say).
+			w.printf("%s.Method{Name: %q, Promoted: true},\n", w.tablesName, m.name)
+			continue
+		}
+		expr := recv + "." + m.name
+		if ptr {
+			expr = "(" + recv + ")." + m.name
+		}
+		w.printf("%s.Method{Name: %q, Expr: %s, Bound: new(%s).%s", w.tablesName, m.name, expr, pt.obj.Name(), m.name)
+		if m.promoted {
+			w.printf(", Promoted: true")
+		}
+		w.printf("},\n")
+	}
+	w.printf(")\n")
+}
+
+// writeFunctions writes the package's standalone components, named as the
+// runtime names them: by import path, "main" for a command.
+func (w *writer) writeFunctions(funcs []*types.Func) {
+	if len(funcs) == 0 {
+		return
+	}
+	sort.Slice(funcs, func(i, j int) bool { return funcs[i].Name() < funcs[j].Name() })
+	path := w.g.pkg.PkgPath
+	if w.g.pkg.Name == "main" {
+		path = "main"
+	}
+	w.printf("%s.AddFunctions(%q,\n", w.tablesName, path)
+	for _, fn := range funcs {
+		w.printf("%s.Function{Name: %q, Func: %s},\n", w.tablesName, fn.Name(), fn.Name())
+	}
+	w.printf(")\n")
 }
 
 // write writes src to path, or removes a generated file there when src is
@@ -683,5 +754,5 @@ func write(path string, src []byte) error {
 	if bytes.Equal(old, src) {
 		return nil
 	}
-	return os.WriteFile(path, src, 0o644)
+	return os.WriteFile(path, src, 0o644) //nolint:gosec // source code, readable like any other
 }

@@ -85,6 +85,11 @@ go tool gsx fmt -w .
    - `htmxUnmatchedTarget.Is` uses `parseContext.componentOwner` (an id → page/method index) and never matches the served page's own type; `matchComponentByTarget` skips its loose passes when the id is exactly another page's component id
    - `Mount` checks every `Props`/extended `ServeHTTP`/component param for ambiguity up front (`checkInjection`; Props' results count as provided for components); `Parse` skips it. A missing dependency stays a request-time error, since pages may be mounted in configurations that don't register their services
 
+7. **Method reflection, two builds**: everything structpages reads about methods and functions (a function type's parameters and results, calls, a type's methods, `MethodByName`, promoted methods, the runtime's name for a function) goes through `funcNumIn`/`funcIn`/`funcOut`/`funcCall`/`typeMethods`/`methodByName`/`isPromotedMethod`/`funcName`/`funcKey`
+   - `reflect_runtime.go` (the standard build): `reflect` and `runtime.FuncForPC`; never call those directly elsewhere
+   - `reflect_tables.go` (`tinygo || structpages_tables`): the tables in package `tables`, filled by the files `cmd/structpages-gen` writes, since TinyGo's `reflect` has none of the above (`docs/tinygo.md`)
+   - Tests: `go run ./cmd/structpages-gen -test ./... && go test -tags structpages_tables ./...` runs the suite on the tables build (CI's Tables build); `tablesBuild` and `skipInTablesBuild` mark the few cases only `reflect` can do
+
 ### Key Design Patterns
 
 - **Page Interface**: A page struct typically implements `Page()` (full render) and optionally `Content()` (HTMX partial body), plus arbitrary partial methods. One `Props` can return several values, each component taking its share by type. Pages can also be Props-only (Props returns `RenderComponent(...)`) or ServeHTTP-only.

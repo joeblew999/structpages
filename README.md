@@ -110,6 +110,7 @@ The full docs live at <https://jackielii.github.io/structpages/>. Good starting 
 - [URLFor & ID](https://jackielii.github.io/structpages/urlfor): type-safe URLs and element ids
 - [Dependency Injection](https://jackielii.github.io/structpages/dependency-injection), [Error Handling](https://jackielii.github.io/structpages/error-handling), [Middleware](https://jackielii.github.io/structpages/middleware)
 - [Testing](https://jackielii.github.io/structpages/testing) and [Lint](https://jackielii.github.io/structpages/lint)
+- [TinyGo](https://jackielii.github.io/structpages/tinygo): building for WebAssembly hosts such as Cloudflare Workers
 - [API Guide](https://jackielii.github.io/structpages/api)
 
 ## Examples

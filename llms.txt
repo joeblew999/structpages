@@ -17,6 +17,7 @@ Read these files in order to learn the library: `README.md` for the elevator pit
 - [Middleware](https://raw.githubusercontent.com/jackielii/structpages/main/docs/middleware.md): Global vs per-page middleware, the `MiddlewareFunc` signature, and using the `*PageNode` argument.
 - [HTMX integration](https://raw.githubusercontent.com/jackielii/structpages/main/docs/htmx.md): `HTMXRenderTarget`, partial rendering via `hx-target`, and how component selection works.
 - [URLFor & ID generation](https://raw.githubusercontent.com/jackielii/structpages/main/docs/urlfor.md): Type-safe URLs and HTML ids — pointer signatures, `[]any` chain disambiguation, `Ref` for dynamic/qualified paths, strict-by-default behaviour, and boot-time URL validation.
+- [TinyGo](https://raw.githubusercontent.com/jackielii/structpages/main/docs/tinygo.md): Building with TinyGo, whose `reflect` can't list or call methods: `structpages-gen` writes the tables a TinyGo build reads instead, and what they can't do (generic page types, function literals as references, Go 1.22 mux patterns).
 - [Templ patterns](https://raw.githubusercontent.com/jackielii/structpages/main/docs/templ.md): Page/Content/partial method patterns when using Templ.
 - [Advanced features](https://raw.githubusercontent.com/jackielii/structpages/main/docs/advanced.md): Custom handlers, `Init`, dependency injection (`WithArgs`), generic types, dynamic refs, and type aliases.
 
@@ -30,6 +31,8 @@ Read these files in order to learn the library: `README.md` for the elevator pit
 ## Tooling
 
 - `structpages-lint` (under `tools/lint/`): static analyzer for `URLFor` / `Ref` / `ID` / `IDTarget` call sites (categories `urlfor`, `ref`, `idfor`, `params`), `.go` string literals equal to a mounted route (`route-literal`), and URL-bearing HTML attributes in `.gsx` and `.templ` files (`url-attr`). gsx `|> url`/`id`/`target` filters are checked through the generated `.x.go`. Install: `go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest`. Suppress with `//structpages:lint:ignore <cat>` in Go, or `// structpages:lint:ignore <cat>` in gsx/templ. README "Lint Tool" and `skills/structpages/reference.md` "Lint" sections have the full category list.
+
+- `structpages-gen` (under `cmd/structpages-gen/`): writes `structpages_tables.go` into each package with pages, for TinyGo builds (built only under `tinygo` or the `structpages_tables` tag). Install: `go get -tool github.com/jackielii/structpages/cmd/structpages-gen@latest`; run after `go tool gsx generate`. See `docs/tinygo.md`.
 
 ## Optional
 

@@ -50,29 +50,19 @@ way to find a missing table.
 ## Routing
 
 TinyGo's `net/http` comes from [tinygo-org/net](https://github.com/tinygo-org/net), whose `ServeMux` still routes
-like Go 1.21's: a pattern with a method (`POST /add`), a wildcard (`{id}`) or `{$}` never matches. So in a TinyGo
-build structpages routes a mount itself, through a copy of Go 1.26's `ServeMux`, and hands your mux only the mount's
-path (`/`, or `/admin` and `/admin/`), which a Go 1.21 mux routes as a Go 1.22 one does. Your code doesn't change:
-`Mount(mux, …)` with `http.NewServeMux()` works the same under both compilers, and the copy is only linked into
-TinyGo builds (it adds about 30 KB of code there).
-
-- structpages owns its mount's path on that mux: registering the same path yourself panics, as two registrations of
-  one pattern do.
-- TinyGo's mux still sees each request first and cleans its path: `/a/../b` is redirected with 301, where Go 1.22's
-  mux uses 307.
+like Go 1.21's: a pattern with a method (`POST /add`), a wildcard (`{id}`) or `{$}` never matches
+([net#55](https://github.com/tinygo-org/net/issues/55); a fix waits in [net#56](https://github.com/tinygo-org/net/pull/56)).
+structpages registers Go 1.22 patterns, so in a TinyGo build give `Mount` a mux that understands them: anything with
+`Handle(pattern string, handler http.Handler)`, such as a copy of Go's own `ServeMux`.
 
 ## When TinyGo catches up
 
-Three things exist only for TinyGo's gaps, each with a comment saying how to remove it:
+Two things exist only for TinyGo's gaps, each with a comment saying how to remove it:
 
 - **The tables** (`reflect_tables.go`, package `tables`, `structpages-gen`): TinyGo's `reflect` can't list or call
   methods ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and `runtime.FuncForPC` returns nil
   ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)). Once a TinyGo release has both, delete them
   and the build constraints on `reflect_runtime.go`; the suite must pass under `tinygo test` with no generated
   tables.
-- **The router** (`routes_tinygo.go`, `internal/servemux`): waits for a Go 1.22 `ServeMux` in tinygo-org/net
-  ([net#55](https://github.com/tinygo-org/net/issues/55), fix in [net#56](https://github.com/tinygo-org/net/pull/56)).
-  Then delete them and the build constraint on `routes_go.go`, so `Mount` registers on your mux directly; the suite
-  must pass under `tinygo test`, `TestMountAtSubpath` and `TestURLFor_requestValuesRoundTrip` among it.
 - **The benchmarks' `//go:build !tinygo`**: TinyGo 0.43's compiler crashes building `struct_pages_bench_test.go`.
   Drop the constraint once `tinygo test` builds it.

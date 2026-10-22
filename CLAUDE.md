@@ -51,7 +51,6 @@ go tool gsx fmt -w .
    - `struct_pages.go`: `Mount`, `StructPages`, options, and request dispatch
    - `parse.go`: Parses struct tags like `route:"/path Title"`, builds the page tree, handles DI matching
    - `page_node.go`: `PageNode` struct and tree traversal (`All`, `FullRoute`)
-   - `routes_go.go`: `Mount` registers on the given mux; under TinyGo (or the `structpages_router` tag) `routes_tinygo.go` registers on `internal/servemux`, a copy of Go 1.26's `ServeMux`, and hands the mux the mount's path, since TinyGo's mux lacks Go 1.22 patterns (the file says when to delete it)
 
 2. **Struct-Based Routing Pattern**: Routes are defined as struct fields with route tags
    ```go
@@ -89,7 +88,7 @@ go tool gsx fmt -w .
 7. **Method reflection, two builds**: everything structpages reads about methods and functions (a function type's parameters and results, calls, a type's methods, `MethodByName`, promoted methods, the runtime's name for a function) goes through `funcNumIn`/`funcIn`/`funcOut`/`funcCall`/`typeMethods`/`methodByName`/`isPromotedMethod`/`funcName`/`funcKey`
    - `reflect_runtime.go` (the standard build): `reflect` and `runtime.FuncForPC`; never call those directly elsewhere
    - `reflect_tables.go` (`tinygo || structpages_tables`): the tables in package `tables`, filled by the files `cmd/structpages-gen` writes, since TinyGo's `reflect` has none of the above (`docs/tinygo.md`)
-   - Tests: `go run ./cmd/structpages-gen -test ./... && go test -tags structpages_tables,structpages_router ./...` runs the suite as TinyGo builds it, on the standard toolchain (CI's Tables build); CI's TinyGo job runs `tinygo test` after `structpages-gen -test -tags tinygo`. `tablesBuild` and `skipInTablesBuild` mark the few cases only `reflect` can do
+   - Tests: `go run ./cmd/structpages-gen -test ./... && go test -tags structpages_tables ./...` runs the suite as TinyGo builds it, on the standard toolchain (CI's Tables build). `tablesBuild` and `skipInTablesBuild` mark the few cases only `reflect` can do
 
 ### Key Design Patterns
 

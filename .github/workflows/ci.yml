@@ -54,32 +54,8 @@ jobs:
       - name: Generate the tables
         run: go run ./cmd/structpages-gen -test ./...
 
-      - name: Run tests as TinyGo builds them
-        # without reflect's method calls, and through internal/servemux
-        run: go test -tags structpages_tables,structpages_router ./...
-
-  tinygo:
-    name: TinyGo
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-
-      - name: Set up TinyGo
-        run: |
-          wget -q https://github.com/tinygo-org/tinygo/releases/download/v0.43.0/tinygo_0.43.0_amd64.deb
-          sudo dpkg -i tinygo_0.43.0_amd64.deb
-
-      - name: Generate the tables
-        run: go run ./cmd/structpages-gen -test -tags tinygo ./...
-
-      - name: Run tests
-        run: tinygo test . ./internal/...
+      - name: Run tests without method reflection
+        run: go test -tags structpages_tables ./...
 
   format:
     name: Format

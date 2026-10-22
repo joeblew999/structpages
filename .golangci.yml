@@ -64,8 +64,6 @@ linters:
       - third_party$
       - builtin$
       - examples$
-      # Go's own net/http routing, copied for TinyGo; kept as Go wrote it.
-      - internal/servemux
 formatters:
   settings:
     goimports:

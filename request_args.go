@@ -34,15 +34,18 @@ func newRequestArg(v any, origin string) (*requestArg, error) {
 			"func(*http.Request, *PageNode) (T, error)", origin, v)
 	}
 	ft := fn.Type()
-	if err := checkFuncType(ft); err != nil {
-		return nil, fmt.Errorf("%s: %w", origin, err)
-	}
-	shapeOK := funcNumOut(ft) == 2 && funcOut(ft, 1) == errorType && !funcIsVariadic(ft) &&
+	// Without reflect (TinyGo), a function of the right shape has a table.
+	tableErr := checkFuncType(ft)
+	shapeOK := tableErr == nil && funcNumOut(ft) == 2 && funcOut(ft, 1) == errorType && !funcIsVariadic(ft) &&
 		(funcNumIn(ft) == 1 || (funcNumIn(ft) == 2 && funcIn(ft, 1) == pageNodeType)) &&
 		funcIn(ft, 0) == requestType
 	if !shapeOK {
-		return nil, fmt.Errorf("%s: got %s, want func(*http.Request) (T, error) or "+
+		err := fmt.Errorf("%s: got %s, want func(*http.Request) (T, error) or "+
 			"func(*http.Request, *PageNode) (T, error)", origin, ft)
+		if tableErr != nil {
+			err = fmt.Errorf("%w (%w)", err, tableErr)
+		}
+		return nil, err
 	}
 	return &requestArg{typ: funcOut(ft, 0), fn: fn, withNode: funcNumIn(ft) == 2, origin: origin}, nil
 }

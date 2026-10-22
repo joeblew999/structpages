@@ -6,7 +6,8 @@
 // structpages-gen writes a file into each package with pages that fills
 // these tables at init, and structpages built with TinyGo (or with the
 // structpages_tables build tag) reads them in place of reflect. Nothing here
-// is meant to be written by hand; see the TinyGo page of the docs.
+// is meant to be written by hand; see the TinyGo page of the docs, and
+// structpages' reflect_tables.go for when this package can go.
 //
 // Every Add function is for init functions: the tables are read without
 // locking once the program runs.

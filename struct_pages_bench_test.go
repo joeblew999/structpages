@@ -1,5 +1,6 @@
 // TinyGo 0.43's compiler crashes building this file (an index out of
 // range in createFunction), so TinyGo test runs leave the benchmarks out.
+// Drop the constraint once `tinygo test` builds the package with it.
 
 //go:build !tinygo
 

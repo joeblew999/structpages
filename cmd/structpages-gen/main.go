@@ -8,6 +8,8 @@
 // built only under TinyGo or the structpages_tables build tag. With -test it
 // also writes the tables for what the package's tests declare. Run it again
 // whenever a page's methods change; a stale table fails at Mount.
+// structpages' reflect_tables.go says why TinyGo needs this, and when it
+// won't.
 package main
 
 import (

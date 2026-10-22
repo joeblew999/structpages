@@ -188,3 +188,12 @@ func TestExtractMethodInfo_EdgeCases(t *testing.T) {
 		t.Error("Expected error for non-function type")
 	}
 }
+
+// skipInTablesBuild skips t on a build that reads methods from generated
+// tables (TinyGo's): it tests what only reflect can do.
+func skipInTablesBuild(t *testing.T, why string) {
+	t.Helper()
+	if tablesBuild {
+		t.Skip(why)
+	}
+}

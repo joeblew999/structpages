@@ -7,8 +7,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 // decodedURL is a generated URL taken apart and decoded, so tests compare
@@ -73,7 +71,7 @@ func TestFormatPathSegments_queryValuesRoundTrip(t *testing.T) {
 				t.Fatalf("formatPathSegments: %v", err)
 			}
 			d := decodeURL(t, got)
-			if diff := cmp.Diff(tt.query, d.Query); diff != "" {
+			if diff := cmpDiff(tt.query, d.Query); diff != "" {
 				t.Errorf("%s: query mismatch (-want +got):\n%s", got, diff)
 			}
 			if d.Fragment != "" {
@@ -134,7 +132,7 @@ func TestFormatPathSegments_pathAndFragmentRoundTrip(t *testing.T) {
 				}
 				return
 			}
-			if diff := cmp.Diff(tt.want, decodeURL(t, got)); diff != "" {
+			if diff := cmpDiff(tt.want, decodeURL(t, got)); diff != "" {
 				t.Errorf("%s: mismatch (-want +got):\n%s", got, diff)
 			}
 		})
@@ -152,7 +150,7 @@ func TestFormatPathSegments_queryValueEveryArgForm(t *testing.T) {
 			if err != nil {
 				t.Fatalf("formatPathSegments: %v", err)
 			}
-			if diff := cmp.Diff(url.Values{"q": {"A&B"}}, decodeURL(t, got).Query); diff != "" {
+			if diff := cmpDiff(url.Values{"q": {"A&B"}}, decodeURL(t, got).Query); diff != "" {
 				t.Errorf("%s: query mismatch (-want +got):\n%s", got, diff)
 			}
 		})
@@ -186,7 +184,7 @@ func TestFormatPathSegments_requestValuesEscaped(t *testing.T) {
 			if err != nil {
 				t.Fatalf("formatPathSegments: %v", err)
 			}
-			if diff := cmp.Diff(tt.want, decodeURL(t, got)); diff != "" {
+			if diff := cmpDiff(tt.want, decodeURL(t, got)); diff != "" {
 				t.Errorf("%s: mismatch (-want +got):\n%s", got, diff)
 			}
 		})
@@ -236,7 +234,7 @@ func TestURLFor_requestValuesRoundTrip(t *testing.T) {
 			if tt.wantPath != "" && !strings.HasPrefix(got, tt.wantPath+"?") {
 				t.Errorf("got %q, want path %q", got, tt.wantPath)
 			}
-			if diff := cmp.Diff(tt.want, decodeURL(t, got)); diff != "" {
+			if diff := cmpDiff(tt.want, decodeURL(t, got)); diff != "" {
 				t.Errorf("%s: mismatch (-want +got):\n%s", got, diff)
 			}
 		})

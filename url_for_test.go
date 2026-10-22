@@ -9,8 +9,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 func Test_formatPathSegments(t *testing.T) {
@@ -103,7 +101,7 @@ func Test_formatPathSegments(t *testing.T) {
 					t.Errorf("formatPathSegments() expected error, got nil")
 					return
 				}
-				if diff := cmp.Diff(tt.err.Error(), err.Error()); diff != "" {
+				if diff := cmpDiff(tt.err.Error(), err.Error()); diff != "" {
 					t.Errorf("formatPathSegments() error mismatch (-want +got):\n%s", diff)
 				}
 			}
@@ -327,7 +325,7 @@ func Test_parseSegments(t *testing.T) {
 			}
 			for i, segment := range got {
 				want := tt.want[i]
-				if diff := cmp.Diff(segment.name, want.name); diff != "" {
+				if diff := cmpDiff(segment.name, want.name); diff != "" {
 					t.Errorf("parseSegments() mismatch at index %d (-got +want):\n%s", i, diff)
 				}
 				if segment.param != want.param {

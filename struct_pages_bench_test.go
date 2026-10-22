@@ -1,3 +1,8 @@
+// TinyGo 0.43's compiler crashes building this file (an index out of
+// range in createFunction), so TinyGo test runs leave the benchmarks out.
+
+//go:build !tinygo
+
 package structpages
 
 import (

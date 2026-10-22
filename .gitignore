@@ -44,3 +44,8 @@ examples/htmx/htmx
 examples/todo/todo
 examples/htmx-render-target/htmx-render-target-example
 examples/lint-misuse/lint-misuse
+
+# Tables structpages-gen writes for this repo's tests (CI's Tables build
+# generates them: go run ./cmd/structpages-gen -test ./...)
+/structpages_tables*.go
+/internal/*/structpages_tables*.go

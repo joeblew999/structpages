@@ -743,6 +743,7 @@ func TestIDFor_ErrorCases(t *testing.T) {
 
 		ctx := pcCtx.WithValue(context.Background(), sp.pc)
 
+		skipInTablesBuild(t, "the tables name declared functions and methods, not function literals")
 		// Call IDFor with function that has no receiver
 		noReceiverFunc := func() component { return testComponent{"test"} }
 		_, err = IDTarget(ctx, noReceiverFunc)

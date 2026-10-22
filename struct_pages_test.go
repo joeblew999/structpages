@@ -13,8 +13,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 type testComponent struct {
@@ -289,7 +287,7 @@ Middleware after: global mw 3
 Middleware after: global mw 2
 Middleware after: global mw 1
 `
-	if diff := cmp.Diff(expectedBody, rec.Body.String()); diff != "" {
+	if diff := cmpDiff(expectedBody, rec.Body.String()); diff != "" {
 		t.Errorf("unexpected body (-want +got):\n%s", diff)
 	}
 }
@@ -314,7 +312,7 @@ func TestFormatMethod(t *testing.T) {
 			name: "valid method with value receiver",
 			setup: func() *reflect.Method {
 				typ := reflect.TypeOf(testComponent{})
-				method, _ := typ.MethodByName("Render")
+				method, _ := methodByName(typ, "Render")
 				return &method
 			},
 			expected: "structpages.testComponent.Render",
@@ -323,7 +321,7 @@ func TestFormatMethod(t *testing.T) {
 			name: "valid method with pointer receiver",
 			setup: func() *reflect.Method {
 				typ := reflect.TypeOf(&renderComponentPage{})
-				method, _ := typ.MethodByName("Page")
+				method, _ := methodByName(typ, "Page")
 				return &method
 			},
 			expected: "structpages.renderComponentPage.Page",
@@ -436,7 +434,7 @@ func TestCallMethodError(t *testing.T) {
 
 	// Use testComponent which has a Render method
 	tc := testComponent{}
-	method, _ := reflect.TypeOf(tc).MethodByName("Render")
+	method, _ := methodByName(reflect.TypeOf(tc), "Render")
 
 	// Create a PageNode with a different type (pointer vs value mismatch)
 	pn := &PageNode{
@@ -642,7 +640,7 @@ func TestStructPages_execProps_methodError(t *testing.T) {
 		pc: &parseContext{args: make(argRegistry)},
 	}
 
-	propsMethod, _ := reflect.TypeOf(&pageWithErrorProps{}).MethodByName("Props")
+	propsMethod, _ := methodByName(reflect.TypeOf(&pageWithErrorProps{}), "Props")
 	pn := &PageNode{
 		Name: "test",
 		Props: map[string]reflect.Method{
@@ -1355,7 +1353,7 @@ func TestExecProps_PropsDIError(t *testing.T) {
 func TestRenderTarget_Is_NoReceiver(t *testing.T) {
 	// Create a RenderTarget
 	pageType := reflect.TypeOf(renderTargetIsTestPage{})
-	method, _ := pageType.MethodByName("Page")
+	method, _ := methodByName(pageType, "Page")
 	rt := newMethodRenderTarget("Page", &method)
 
 	// Test with function that has no parameters (no receiver)
@@ -1370,7 +1368,7 @@ func TestRenderTarget_Is_NoReceiver(t *testing.T) {
 func TestRenderTarget_Is_PointerReceiver(t *testing.T) {
 	// Get the pointer receiver method
 	pageType := reflect.TypeOf(&pointerReceiverPage{})
-	method, ok := pageType.MethodByName("Content")
+	method, ok := methodByName(pageType, "Content")
 	if !ok {
 		t.Fatal("Could not find Content method")
 	}

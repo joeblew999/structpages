@@ -349,13 +349,14 @@ func TestBuildHandler_InvalidComponentMethod(t *testing.T) {
 	}
 
 	// Create a page node with an invalid component method
+	page, _ := methodByName(reflect.TypeOf((*mockPage)(nil)), "Page")
 	pn := &PageNode{
 		Value: reflect.ValueOf(&mockPage{}),
 		Name:  "invalidMethodPage",
 		Components: map[string]reflect.Method{
 			"Page": {
 				Name: "Page",
-				Type: reflect.TypeOf((*mockPage)(nil)).Method(0).Type,
+				Type: page.Type,
 				Func: reflect.Value{}, // Invalid Func field
 			},
 		},

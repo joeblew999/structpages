@@ -82,7 +82,7 @@ func (t *testPage) String() string { return "test" }
 // Test PageNode.String with components and props
 func TestPageNode_String_componentsAndProps(t *testing.T) {
 	// Get a real method for testing
-	method, _ := reflect.TypeOf(&testPage{}).MethodByName("String")
+	method, _ := methodByName(reflect.TypeOf(&testPage{}), "String")
 
 	pn := &PageNode{
 		Name:  "test",

@@ -176,6 +176,7 @@ func (genericPage[T]) Page() component  { return testComponent{"page"} }
 func (genericPage[T]) Notes() component { return testComponent{"notes"} }
 
 func TestRegression_isWithBoundValueOfGenericPage(t *testing.T) {
+	skipInTablesBuild(t, "generic page types need reflect")
 	type root struct {
 		G genericPage[int] `route:"/g G"`
 	}

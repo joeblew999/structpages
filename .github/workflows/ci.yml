@@ -39,6 +39,24 @@ jobs:
           file: ./coverage.txt
           fail_ci_if_error: false
 
+  tables:
+    name: Tables build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Generate the tables
+        run: go run ./cmd/structpages-gen -test ./...
+
+      - name: Run tests without method reflection
+        run: go test -tags structpages_tables ./...
+
   format:
     name: Format
     runs-on: ubuntu-latest

@@ -119,7 +119,7 @@ func TestRenderTarget_DifferentReceiverTypes(t *testing.T) {
 
 	// Create RenderTarget for selectionTestPage.TodoList
 	pageType := reflect.TypeOf(selectionTestPage{})
-	method, _ := pageType.MethodByName("TodoList")
+	method, _ := methodByName(pageType, "TodoList")
 	sel := newMethodRenderTarget("TodoList", &method)
 
 	// Should match selectionTestPage.TodoList
@@ -135,7 +135,7 @@ func TestRenderTarget_DifferentReceiverTypes(t *testing.T) {
 
 func TestRenderTarget_InvalidMethodExpression(t *testing.T) {
 	pageType := reflect.TypeOf(selectionTestPage{})
-	method, _ := pageType.MethodByName("Page")
+	method, _ := methodByName(pageType, "Page")
 	sel := newMethodRenderTarget("Page", &method)
 
 	// Test with invalid inputs
@@ -305,6 +305,10 @@ func TestMethodRenderTarget_Is_EdgeCases(t *testing.T) {
 		t.Error("Should not match when method.Type is nil")
 	}
 
+	if tablesBuild {
+		return // the rest builds a method from a function literal, which only reflect can describe
+	}
+
 	// Test with bound method where selectedReceiverType is nil
 	// Create a method with no inputs (NumIn() == 0)
 	noInputMethod := reflect.Method{
@@ -344,7 +348,7 @@ func (*ptrReceiverTestPage) PointerMethod() component {
 func TestMethodRenderTarget_Is_BoundMethods(t *testing.T) {
 	// Create a methodRenderTarget for selectionTestPage.TodoList
 	pageType := reflect.TypeOf(selectionTestPage{})
-	method, _ := pageType.MethodByName("TodoList")
+	method, _ := methodByName(pageType, "TodoList")
 	mrt := &methodRenderTarget{
 		name:   "TodoList",
 		method: method,
@@ -371,7 +375,7 @@ func TestMethodRenderTarget_Is_BoundMethods(t *testing.T) {
 func TestMethodRenderTarget_Is_PointerReceiverUnbound(t *testing.T) {
 	// Create a methodRenderTarget for a pointer receiver method
 	pageType := reflect.TypeOf(&ptrReceiverTestPage{})
-	method, ok := pageType.MethodByName("PointerMethod")
+	method, ok := methodByName(pageType, "PointerMethod")
 	if !ok {
 		t.Fatal("PointerMethod not found")
 	}
@@ -495,11 +499,11 @@ func (*debugPtrReceiverPage) PtrMethod() component {
 func TestDebugPointerUnwrapping(t *testing.T) {
 	// Create methodRenderTarget
 	pageType := reflect.TypeOf(&debugPtrReceiverPage{})
-	method, _ := pageType.MethodByName("PtrMethod")
+	method, _ := methodByName(pageType, "PtrMethod")
 
-	t.Logf("Method.Type.NumIn(): %d", method.Type.NumIn())
-	if method.Type.NumIn() > 0 {
-		t.Logf("Method.Type.In(0): %v (Kind: %v)", method.Type.In(0), method.Type.In(0).Kind())
+	t.Logf("Method.Type.NumIn(): %d", funcNumIn(method.Type))
+	if funcNumIn(method.Type) > 0 {
+		t.Logf("Method.Type.In(0): %v (Kind: %v)", funcIn(method.Type, 0), funcIn(method.Type, 0).Kind())
 	}
 
 	// Create unbound method expression

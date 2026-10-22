@@ -7,8 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 func TestParseTag(t *testing.T) {
@@ -255,7 +253,7 @@ func Test_parseContext_getArg(t *testing.T) {
 				t.Errorf("getArg() did not find type %v", tt.in)
 				return
 			}
-			if diff := cmp.Diff(got.Interface(), tt.want); diff != "" {
+			if diff := cmpDiff(got.Interface(), tt.want); diff != "" {
 				t.Errorf("getArg() mismatch (-got +want):\n%s", diff)
 			}
 		})
@@ -298,7 +296,7 @@ func TestParseContext_callComponentMethod_noResults(t *testing.T) {
 		Value: reflect.ValueOf(&pageWithNoReturn{}),
 	}
 
-	method, _ := reflect.TypeOf(&pageWithNoReturn{}).MethodByName("NoReturn")
+	method, _ := methodByName(reflect.TypeOf(&pageWithNoReturn{}), "NoReturn")
 
 	// This should return error because no results
 	_, err := pc.callComponentMethod(nil, pn, &method, nil, nil)
@@ -388,7 +386,7 @@ func TestParseContext_callComponentMethod_wrongReturnType(t *testing.T) {
 		Value: reflect.ValueOf(&pageWithWrongReturn{}),
 	}
 
-	method, _ := reflect.TypeOf(&pageWithWrongReturn{}).MethodByName("WrongReturn")
+	method, _ := methodByName(reflect.TypeOf(&pageWithWrongReturn{}), "WrongReturn")
 
 	// This should return error because return type is not component
 	_, err := pc.callComponentMethod(nil, pn, &method, nil, nil)
@@ -412,7 +410,7 @@ func TestParseContext_callMethod_error(t *testing.T) {
 		Value: reflect.ValueOf(&pageWithBadMethod{}),
 	}
 
-	method, _ := reflect.TypeOf(&pageWithBadMethod{}).MethodByName("BadMethod")
+	method, _ := methodByName(reflect.TypeOf(&pageWithBadMethod{}), "BadMethod")
 
 	// Try to call with wrong type - should cause error
 	_, err := pc.callMethod(pn, &method, reflect.ValueOf(123)) // passing int instead of string
@@ -448,7 +446,7 @@ func TestParseContext_callInitMethod(t *testing.T) {
 			Name:  "test",
 			Value: reflect.ValueOf(&pageWithInit{}),
 		}
-		method, _ := reflect.TypeOf(&pageWithInit{}).MethodByName("Init")
+		method, _ := methodByName(reflect.TypeOf(&pageWithInit{}), "Init")
 
 		err := pc.callInitMethod(pn, &method)
 		if err != nil {
@@ -462,7 +460,7 @@ func TestParseContext_callInitMethod(t *testing.T) {
 			Name:  "test",
 			Value: reflect.ValueOf(&pageWithInitError{}),
 		}
-		method, _ := reflect.TypeOf(&pageWithInitError{}).MethodByName("Init")
+		method, _ := methodByName(reflect.TypeOf(&pageWithInitError{}), "Init")
 
 		err := pc.callInitMethod(pn, &method)
 		if err == nil {
@@ -474,6 +472,7 @@ func TestParseContext_callInitMethod(t *testing.T) {
 	})
 
 	t.Run("callMethod fails", func(t *testing.T) {
+		skipInTablesBuild(t, "builds its method from a function literal, which only reflect can describe")
 		// Create a type with Init method that requires missing arg
 		type pageWithInitNeedsArg struct{}
 		type initNeeder interface{ NeedThis() }
@@ -570,7 +569,7 @@ func TestCallMethod_receiverConversions(t *testing.T) {
 			Name:  "test",
 			Value: reflect.ValueOf(&val).Elem(), // addressable value
 		}
-		method, _ := reflect.TypeOf(&pageWithPointerReceiver{}).MethodByName("PointerMethod")
+		method, _ := methodByName(reflect.TypeOf(&pageWithPointerReceiver{}), "PointerMethod")
 
 		// Should convert value to pointer
 		_, err := pc.callMethod(pn, &method)
@@ -585,7 +584,7 @@ func TestCallMethod_receiverConversions(t *testing.T) {
 			Name:  "test",
 			Value: reflect.ValueOf(pageWithPointerReceiver{}), // unaddressable value
 		}
-		method, _ := reflect.TypeOf(&pageWithPointerReceiver{}).MethodByName("PointerMethod")
+		method, _ := methodByName(reflect.TypeOf(&pageWithPointerReceiver{}), "PointerMethod")
 
 		// This should now return an error instead of panicking
 		_, err := pc.callMethod(pn, &method)
@@ -603,7 +602,7 @@ func TestCallMethod_receiverConversions(t *testing.T) {
 			Name:  "test",
 			Value: reflect.ValueOf(&pageWithPageNodeArg{}),
 		}
-		method, _ := reflect.TypeOf(&pageWithPageNodeArg{}).MethodByName("MethodWithPageNode")
+		method, _ := methodByName(reflect.TypeOf(&pageWithPageNodeArg{}), "MethodWithPageNode")
 
 		// Should inject the PageNode
 		_, err := pc.callMethod(pn, &method)
@@ -618,7 +617,7 @@ func TestCallMethod_receiverConversions(t *testing.T) {
 			Name:  "test",
 			Value: reflect.ValueOf(&pageWithPageNodeValueArg{}),
 		}
-		method, _ := reflect.TypeOf(&pageWithPageNodeValueArg{}).MethodByName("MethodWithPageNodeValue")
+		method, _ := methodByName(reflect.TypeOf(&pageWithPageNodeValueArg{}), "MethodWithPageNodeValue")
 
 		// Should inject the PageNode value
 		_, err := pc.callMethod(pn, &method)

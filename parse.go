@@ -150,8 +150,11 @@ func (p *parseContext) parseChildFields(st reflect.Type, item *PageNode) error {
 // processMethods processes all methods of the page
 func (p *parseContext) processMethods(st, pt reflect.Type, item *PageNode) error {
 	for _, t := range []reflect.Type{st, pt} {
-		for i := range t.NumMethod() {
-			method := t.Method(i)
+		methods, err := typeMethods(t)
+		if err != nil {
+			return err
+		}
+		for _, method := range methods {
 			if isPromotedMethod(&method) {
 				continue // skip promoted methods
 			}
@@ -249,7 +252,7 @@ func (p *parseContext) callMethodWith(
 	availableArgs := newAvailableArgs(pn, args, exactOnly)
 
 	// Prepare method arguments
-	in := make([]reflect.Value, method.Type.NumIn())
+	in := make([]reflect.Value, funcNumIn(method.Type))
 	in[0] = v // first argument is the receiver
 
 	// Fill remaining arguments
@@ -257,12 +260,12 @@ func (p *parseContext) callMethodWith(
 		return nil, err
 	}
 
-	return method.Func.Call(in), nil
+	return funcCall(method.Func, in), nil
 }
 
 // prepareReceiver ensures the receiver matches the method's expectations
 func (p *parseContext) prepareReceiver(v reflect.Value, method *reflect.Method) (reflect.Value, error) {
-	receiver := method.Type.In(0)
+	receiver := funcIn(method.Type, 0)
 
 	if receiver.Kind() == reflect.Pointer && v.Kind() != reflect.Pointer {
 		if !v.CanAddr() {
@@ -341,8 +344,8 @@ func (p *parseContext) fillMethodArgs(
 	method *reflect.Method,
 	availableArgs *availableArgs,
 ) error {
-	for i := 1; i < method.Type.NumIn(); i++ {
-		argType := method.Type.In(i)
+	for i := 1; i < funcNumIn(method.Type); i++ {
+		argType := funcIn(method.Type, i)
 
 		if arg, found := availableArgs.take(argType); found {
 			in[i] = arg
@@ -384,8 +387,8 @@ func (p *parseContext) fillMethodArgs(
 func (p *parseContext) checkMethodArgs(pn *PageNode, method *reflect.Method, provided, exactOnly []reflect.Type) error {
 	unused := append(slices.Clip(provided), reflect.TypeFor[*PageNode](), reflect.TypeFor[PageNode]())
 	unusedExact := slices.Clone(exactOnly)
-	for i := 1; i < method.Type.NumIn(); i++ {
-		argType := method.Type.In(i)
+	for i := 1; i < funcNumIn(method.Type); i++ {
+		argType := funcIn(method.Type, i)
 		if j := slices.Index(unused, argType); j >= 0 {
 			unused = slices.Delete(unused, j, j+1)
 			continue

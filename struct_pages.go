@@ -591,8 +591,8 @@ func (sp *StructPages) checkInjection() error {
 // from first.
 func propsResultTypes(m *reflect.Method) []reflect.Type {
 	var ts []reflect.Type
-	for i := range m.Type.NumOut() {
-		ts = append(ts, m.Type.Out(i))
+	for i := range funcNumOut(m.Type) {
+		ts = append(ts, funcOut(m.Type, i))
 	}
 	if n := len(ts); n > 0 && ts[n-1].AssignableTo(errorType) {
 		ts = ts[:n-1]
@@ -609,9 +609,9 @@ func serveHTTPMethod(pn *PageNode) (reflect.Method, bool) {
 	} else {
 		pt = reflect.PointerTo(st)
 	}
-	method, ok := st.MethodByName("ServeHTTP")
+	method, ok := methodByName(st, "ServeHTTP")
 	if !ok || isPromotedMethod(&method) {
-		method, ok = pt.MethodByName("ServeHTTP")
+		method, ok = methodByName(pt, "ServeHTTP")
 		if !ok || isPromotedMethod(&method) {
 			return reflect.Method{}, false
 		}
@@ -622,7 +622,7 @@ func serveHTTPMethod(pn *PageNode) (reflect.Method, bool) {
 // isExtendedServeHTTP reports whether method is the ServeHTTP form that
 // takes parameters beyond the writer and request, filled by injection.
 func isExtendedServeHTTP(method *reflect.Method) bool {
-	return method.Type.NumIn() > 3 // receiver, http.ResponseWriter, *http.Request
+	return funcNumIn(method.Type) > 3 // receiver, http.ResponseWriter, *http.Request
 }
 
 func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
@@ -659,7 +659,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var wv reflect.Value // ResponseWriter, will be buffered if handler returns error
 			var bw *buffered
-			if method.Type.NumOut() > 0 {
+			if funcNumOut(method.Type) > 0 {
 				// If the method returns any values (including just an error), we need to buffer
 				bw = newBuffered(w)
 				defer func() { _ = bw.close() }() // ignore error, no way to recover from it. maybe log it?
@@ -702,7 +702,7 @@ func (sp *StructPages) asHandler(pn *PageNode) http.Handler {
 			_, err = extractError(results)
 			if err != nil {
 				// bw is guaranteed to be non-nil here because:
-				// - bw is nil only when method.Type.NumOut() == 0
+				// - bw is nil only when funcNumOut(method.Type) == 0
 				// - when NumOut() == 0, extractError always returns nil error
 				// - therefore this branch is only reachable when bw != nil
 				bw.buf.Reset()

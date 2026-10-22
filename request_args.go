@@ -34,14 +34,17 @@ func newRequestArg(v any, origin string) (*requestArg, error) {
 			"func(*http.Request, *PageNode) (T, error)", origin, v)
 	}
 	ft := fn.Type()
-	shapeOK := ft.NumOut() == 2 && ft.Out(1) == errorType && !ft.IsVariadic() &&
-		(ft.NumIn() == 1 || (ft.NumIn() == 2 && ft.In(1) == pageNodeType)) &&
-		ft.In(0) == requestType
+	if err := checkFuncType(ft); err != nil {
+		return nil, fmt.Errorf("%s: %w", origin, err)
+	}
+	shapeOK := funcNumOut(ft) == 2 && funcOut(ft, 1) == errorType && !funcIsVariadic(ft) &&
+		(funcNumIn(ft) == 1 || (funcNumIn(ft) == 2 && funcIn(ft, 1) == pageNodeType)) &&
+		funcIn(ft, 0) == requestType
 	if !shapeOK {
 		return nil, fmt.Errorf("%s: got %s, want func(*http.Request) (T, error) or "+
 			"func(*http.Request, *PageNode) (T, error)", origin, ft)
 	}
-	return &requestArg{typ: ft.Out(0), fn: fn, withNode: ft.NumIn() == 2, origin: origin}, nil
+	return &requestArg{typ: funcOut(ft, 0), fn: fn, withNode: funcNumIn(ft) == 2, origin: origin}, nil
 }
 
 // requestArgLevel holds the providers one page (or WithRequestArgs, for
@@ -159,7 +162,7 @@ func (rs *requestScope) call(a *requestArg) requestArgResult {
 	if a.withNode {
 		in = append(in, reflect.ValueOf(rs.pn))
 	}
-	out := a.fn.Call(in)
+	out := funcCall(a.fn, in)
 	if err, _ := out[1].Interface().(error); err != nil {
 		return requestArgResult{err: fmt.Errorf("request arg %s: %w", a.typ, err)}
 	}

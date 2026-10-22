@@ -96,8 +96,8 @@ func (mrt *methodRenderTarget) Is(method any) bool {
 
 	// For methods, compare both name and receiver type
 	var selectedReceiverType reflect.Type
-	if mrt.method.Type.NumIn() > 0 {
-		selectedReceiverType = mrt.method.Type.In(0)
+	if funcNumIn(mrt.method.Type) > 0 {
+		selectedReceiverType = funcIn(mrt.method.Type, 0)
 		if selectedReceiverType.Kind() == reflect.Pointer {
 			selectedReceiverType = selectedReceiverType.Elem()
 		}

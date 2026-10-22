@@ -239,7 +239,7 @@ func idForChain(pc *parseContext, currentPage *PageNode, parts []any, rawID bool
 	}
 
 	leafType := pointerType(leaf.Value.Type())
-	if _, ok := leafType.MethodByName(methodName); !ok {
+	if _, ok := methodByName(leafType, methodName); !ok {
 		return "", fmt.Errorf("ID: method %q not found on chain leaf type %s",
 			methodName, leafType.Elem().Name())
 	}
@@ -330,7 +330,7 @@ func (p *parseContext) collectPageNodesForMethod(info *methodInfo) []*PageNode {
 			if !sameTypeName(nodeType, info.receiverTypeName) {
 				continue
 			}
-			if _, found := nodeType.MethodByName(info.methodName); !found {
+			if _, found := methodByName(nodeType, info.methodName); !found {
 				continue
 			}
 		} else if pointerType(nodeType) != pointerType(info.receiverType) {
@@ -358,7 +358,7 @@ func pageNodeMatchesMethod(pn *PageNode, info *methodInfo) bool {
 	}
 	// Confirm the method exists on this type — guards against
 	// matching a same-named type that doesn't have the method.
-	_, found := pointerType(nodeType).MethodByName(info.methodName)
+	_, found := methodByName(pointerType(nodeType), info.methodName)
 	return found
 }
 
@@ -400,7 +400,7 @@ func idForRef(pc *parseContext, ref string, rawID bool) (string, error) {
 			continue
 		}
 		named = append(named, node)
-		if _, found := node.Value.Type().MethodByName(methodName); found {
+		if _, found := methodByName(node.Value.Type(), methodName); found {
 			withMethod = append(withMethod, node)
 		}
 	}
@@ -428,7 +428,7 @@ func idForRef(pc *parseContext, ref string, rawID bool) (string, error) {
 func findPagesWithMethod(pc *parseContext, methodName string) []*PageNode {
 	var matches []*PageNode
 	for node := range pc.root.All() {
-		if _, found := node.Value.Type().MethodByName(methodName); found {
+		if _, found := methodByName(node.Value.Type(), methodName); found {
 			matches = append(matches, node)
 		}
 	}

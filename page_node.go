@@ -121,10 +121,10 @@ func (pn *PageNode) hasServeHTTP() bool {
 	} else {
 		pt = reflect.PointerTo(st)
 	}
-	if m, ok := st.MethodByName("ServeHTTP"); ok && !isPromotedMethod(&m) {
+	if m, ok := methodByName(st, "ServeHTTP"); ok && !isPromotedMethod(&m) {
 		return true
 	}
-	if m, ok := pt.MethodByName("ServeHTTP"); ok && !isPromotedMethod(&m) {
+	if m, ok := methodByName(pt, "ServeHTTP"); ok && !isPromotedMethod(&m) {
 		return true
 	}
 	return false

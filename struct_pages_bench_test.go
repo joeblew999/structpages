@@ -1,6 +1,9 @@
-// TinyGo 0.43's compiler crashes building this file (an index out of
-// range in createFunction), so TinyGo test runs leave the benchmarks out.
-// Drop the constraint once `tinygo test` builds the package with it.
+// TinyGo 0.43 gives a function-local type's promoted method the symbol of a
+// package-level type's method with the same name (tinygo-org/tinygo#5845's
+// kind of clash): the local `index` types below embed pages, and url_for_test.go
+// has a package-level `index` with its own Page. Building this file, its
+// compiler panics (index out of range in createFunction), so TinyGo test runs
+// leave the benchmarks out. Drop the constraint once `tinygo test` builds it.
 
 //go:build !tinygo
 

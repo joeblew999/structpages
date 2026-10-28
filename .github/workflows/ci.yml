@@ -52,7 +52,7 @@ jobs:
           go-version: "1.25"
 
       - name: Generate the tables
-        run: go run ./cmd/structpages-gen -test ./...
+        run: go run -C tools/gen ./cmd/structpages-gen -C "$PWD" -test ./...
 
       - name: Run tests without method reflection
         run: go test -tags structpages_tables ./...
@@ -100,7 +100,9 @@ jobs:
           fi
 
       - name: Run go vet
-        run: go vet ./...
+        run: |
+          go vet ./...
+          go vet -C tools/gen ./...
 
       # Note: staticcheck is handled by golangci-lint job with proper test exclusions
 
@@ -120,6 +122,13 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+          args: --timeout=5m
+
+      - name: golangci-lint (tools/gen)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          working-directory: tools/gen
           args: --timeout=5m
 
   test-examples:

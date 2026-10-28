@@ -22,7 +22,7 @@ import (
 //
 // When a TinyGo release has all of those, delete this file,
 // reflect_tables_test.go, cmpdiff_tinygo_test.go, package tables and
-// cmd/structpages-gen, and drop the build constraints from
+// tools/gen, and drop the build constraints from
 // reflect_runtime.go, reflect_runtime_test.go and cmpdiff_test.go (and the
 // tablesBuild skips with them). It is safe when the suite passes under
 // `tinygo test` with no generated tables.

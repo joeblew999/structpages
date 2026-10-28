@@ -16,7 +16,7 @@ needs all four, so everything it reads about methods and functions goes through 
 implementations, picked by build tag:
 
 - `reflect_runtime.go` (standard Go, the default): `reflect`, exactly as before.
-- `reflect_tables.go` (TinyGo, or Go with `-tags structpages_tables`): tables that `cmd/structpages-gen` writes ahead
+- `reflect_tables.go` (TinyGo, or Go with `-tags structpages_tables`): tables that `tools/gen` (structpages-gen) writes ahead
   of time from the app's source.
 
 The generator replaces method reflection only. Struct fields, values and dependency injection still use `reflect` in

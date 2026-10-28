@@ -56,7 +56,7 @@ run = "go test -run NoTest -bench . -benchmem ."
 [tasks."bench:tables"]
 description = "Run the benchmarks on standard Go reading the generated tables: TinyGo's code path, on Go's compiler. Compare with bench."
 run = [
-  "go run ./cmd/structpages-gen -test ./...",
+  "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...",
   "go test -tags structpages_tables -run NoTest -bench . -benchmem .",
 ]
 
@@ -75,7 +75,7 @@ set -euo pipefail
 flags=(-run NoTest -bench "${BENCH:-.}" -benchmem -count "${COUNT:-6}" -benchtime "${BENCHTIME:-200ms}")
 quiet() { "$@" 2> >(grep -v 'structpages-gen: warning' >&2); }
 echo "running reflect..."; reflect=$(go test "${flags[@]}" .)
-echo "running tables..."; quiet go run ./cmd/structpages-gen -test ./...
+echo "running tables..."; quiet go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...
 tables=$(go test -tags structpages_tables "${flags[@]}" .)
 # TinyGo prints no -N CPU suffix or goos/pkg/cpu lines, and 0 for every allocs/op, so those are left out.
 echo "running tinygo..."; tinygo=$(quiet scripts/tinygo-test.sh "${flags[@]}" | sed -E 's/[[:space:]]+0 allocs\/op//')
@@ -106,12 +106,12 @@ description = "Fail if any file needs gofmt (CI's Format job)."
 run = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
 
 [tasks.vet]
-description = "Run go vet (CI's Format job)."
-run = "go vet ./..."
+description = "Run go vet on the library and on tools/gen, its own module (CI's Format job)."
+run = ["go vet ./...", "go vet -C tools/gen ./..."]
 
 [tasks.lint]
-description = "Run golangci-lint with .golangci.yml (CI's Lint job)."
-run = "golangci-lint run --timeout=5m"
+description = "Run golangci-lint with .golangci.yml on the library and on tools/gen (CI's Lint job)."
+run = ["golangci-lint run --timeout=5m", "cd tools/gen && golangci-lint run --timeout=5m"]
 
 [tasks."test:examples"]
 description = "For each example: regenerate its gsx output, then build and test it (CI's Example jobs)."
@@ -184,6 +184,22 @@ done
 exit $fail
 '''
 
+[tasks."gen:examples"]
+description = """Run structpages-gen, built from tools/gen, over every example: regenerates gsx output, then writes \
+structpages_tables.generated.go into each package with pages (gitignored), and lists what it wrote."""
+run = '''
+fail=0
+for d in examples/*/; do
+  echo "== $d"
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
+    (cd "$d" && go tool gsx generate -q .) || fail=1
+  fi
+  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" ./... || fail=1
+  find "$d" -name 'structpages_tables*.generated*.go' | sed 's/^/   generated: /'
+done
+exit $fail
+'''
+
 [tasks."test:structpages-lint"]
 description = "Test the structpages-lint analyzer module in tools/lint (not in CI; TestRegion_Integration fails on main too)."
 dir = "tools/lint"
@@ -192,7 +208,7 @@ run = "go test ./..."
 [tasks."test:tables"]
 description = "Generate the method tables, then run the suite on standard Go reading them instead of reflect (CI's Tables build)."
 run = [
-  "go run ./cmd/structpages-gen -test ./...",
+  "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...",
   "go test -tags structpages_tables ./...",
 ]
 

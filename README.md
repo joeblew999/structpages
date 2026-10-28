@@ -163,7 +163,7 @@ two implementations, picked by build tag:
 | Build | Implementation | Methods come from |
 |---|---|---|
 | standard Go (default) | `reflect_runtime.go` | `reflect`, as before: nothing changes for Go users |
-| TinyGo, or Go with `-tags structpages_tables` | `reflect_tables.go` | tables generated ahead of time by `cmd/structpages-gen` |
+| TinyGo, or Go with `-tags structpages_tables` | `reflect_tables.go` | tables generated ahead of time by `tools/gen` |
 
 The same tests and benchmarks run on both, and the tables build also runs on standard Go, so a problem in the tables
 can be told apart from a TinyGo one. The goal is parity: everything that passes on standard Go passes on TinyGo. What
@@ -182,6 +182,7 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 | `mise run bench:compare` | all three benchmark runs, compared with benchstat into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md) |
 | `mise run ci:go` | everything CI checks on standard Go |
 | `mise run example:simple` (`blog`, `htmx`, `todo`, ...) | one example app, served on http://localhost:8080 |
+| `mise run gen:examples` / `lint:examples` | structpages-gen (`tools/gen`) or structpages-lint (`tools/lint`) over every example |
 
 On standard Go the tables come out about even with `reflect` overall: faster for `ID`, slower for `Mount` and `URLFor`
 (see the comparison). They are there for TinyGo, not for speed.

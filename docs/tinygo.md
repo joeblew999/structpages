@@ -14,11 +14,11 @@ function, and that is how structpages finds a page's methods, fills their parame
 ## Generate the tables
 
 ```bash
-go get -tool github.com/jackielii/structpages/cmd/structpages-gen@latest
+go get -tool github.com/jackielii/structpages/tools/gen/cmd/structpages-gen@latest
 go tool structpages-gen ./...
 ```
 
-It writes `structpages_tables.go` into each package that declares pages, standalone components or request-arg
+It writes `structpages_tables.generated.go` into each package that declares pages, standalone components or request-arg
 providers. Only TinyGo builds the file (`//go:build tinygo || structpages_tables`), so the standard toolchain
 ignores it.
 

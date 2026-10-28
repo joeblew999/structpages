@@ -497,8 +497,8 @@ methods, fills their parameters and resolves `ID(ctx, p.Content)`. A TinyGo buil
 structpages_tables`) reads the same from tables that `structpages-gen` generates. Pages don't change.
 
 ```shell
-go get -tool github.com/jackielii/structpages/cmd/structpages-gen@latest
-go tool structpages-gen ./...              # writes structpages_tables.go in each package with pages
+go get -tool github.com/jackielii/structpages/tools/gen/cmd/structpages-gen@latest
+go tool structpages-gen ./...              # writes structpages_tables.generated.go in each package with pages
 go tool structpages-gen -tags tinygo ./... # when some files build only under TinyGo, or never under it
 ```
 
@@ -508,7 +508,7 @@ go tool structpages-gen -tags tinygo ./... # when some files build only under Ti
   app.page; run go tool structpages-gen`. That message means regenerate, not edit.
 - Generate with the build's own tags: tables written for one set of files don't compile against another.
   `-test` adds what `_test.go` files declare, for `tinygo test`.
-- Never edit `structpages_tables.go`. Commit it like gsx's `.x.go`, or generate it in the build.
+- Never edit `structpages_tables.generated.go`. Commit it like gsx's `.x.go`, or generate it in the build.
 - Generic page types can't be tabled (the generator warns); give a TinyGo app concrete page types.
 - TinyGo's own `net/http` mux lacks Go 1.22 patterns (`GET /items/{id}`, `/{$}`): mount on a mux that has
   them. See docs/tinygo.md.

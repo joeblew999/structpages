@@ -45,7 +45,9 @@ examples/todo/todo
 examples/htmx-render-target/htmx-render-target-example
 examples/lint-misuse/lint-misuse
 
-# Tables structpages-gen writes for this repo's tests (CI's Tables build
-# generates them: go run ./cmd/structpages-gen -test ./...)
-/structpages_tables*.go
-/internal/*/structpages_tables*.go
+# Tables structpages-gen writes (named *.generated*.go): for this repo's
+# tests (CI's Tables build: go run -C tools/gen ./cmd/structpages-gen -C "$PWD"
+# -test ./...), and for the examples (mise run gen:examples)
+/structpages_tables*.generated*.go
+/internal/*/structpages_tables*.generated*.go
+/examples/**/structpages_tables*.generated*.go

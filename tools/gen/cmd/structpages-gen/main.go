@@ -1,15 +1,20 @@
 // Command structpages-gen writes the tables structpages reads in builds
 // whose reflect package can't list or call methods: TinyGo's.
 //
-//	go tool structpages-gen [-test] [-tags tags] [packages]
+//	go tool structpages-gen [-C dir] [-test] [-tags tags] [packages]
 //
 // For each package (default ./...) that declares page types, standalone
-// components or request-arg functions, it writes structpages_tables.go,
-// built only under TinyGo or the structpages_tables build tag. With -test it
-// also writes the tables for what the package's tests declare. Run it again
-// whenever a page's methods change; a stale table fails at Mount.
+// components or request-arg functions, it writes
+// structpages_tables.generated.go, built only under TinyGo or the
+// structpages_tables build tag. With -test it also writes the tables for
+// what the package's tests declare (structpages_tables.generated_test.go).
+// Run it again whenever a page's methods change; a stale table fails at
+// Mount.
 // structpages' reflect_tables.go says why TinyGo needs this, and when it
 // won't.
+//
+// -C runs it as if from dir, the way go -C does: packages load from there,
+// for running it with go run from outside the module that has them.
 package main
 
 import (
@@ -44,13 +49,20 @@ const (
 var pageMethods = []string{"Page", "ServeHTTP", "Middlewares", "RequestArgs", "Init"}
 
 func main() {
+	dir := flag.String("C", "", "change to `dir` before loading the packages")
 	test := flag.Bool("test", false, "also write tables for what the packages' _test.go files declare")
 	tags := flag.String("tags", "", "build tags to load the packages with")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: structpages-gen [-test] [-tags tags] [packages]\n")
+		fmt.Fprintf(os.Stderr, "usage: structpages-gen [-C dir] [-test] [-tags tags] [packages]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if *dir != "" {
+		if err := os.Chdir(*dir); err != nil {
+			fmt.Fprintln(os.Stderr, "structpages-gen:", err)
+			os.Exit(2)
+		}
+	}
 	patterns := flag.Args()
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
@@ -125,12 +137,13 @@ func coveredFiles(p *packages.Package) (files map[string]bool, out string) {
 	if len(files) == 0 {
 		return nil, ""
 	}
-	name := "structpages_tables.go"
+	// The name says the file is generated; tests' tables still end in _test.go.
+	name := "structpages_tables.generated.go"
 	switch {
 	case inTest && strings.HasSuffix(p.Name, "_test"):
-		name = "structpages_tables_external_test.go"
+		name = "structpages_tables_external.generated_test.go"
 	case inTest:
-		name = "structpages_tables_test.go"
+		name = "structpages_tables.generated_test.go"
 	}
 	return files, filepath.Join(filepath.Dir(p.GoFiles[0]), name)
 }

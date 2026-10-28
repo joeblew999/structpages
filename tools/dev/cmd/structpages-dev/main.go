@@ -8,6 +8,8 @@
 //
 //	structpages-dev test dynamic|static|static-worker
 //	structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder
+//	structpages-dev bench dynamic|static|static-worker
+//	structpages-dev report
 //	structpages-dev [-C dir] bench folder
 //	structpages-dev serve dynamic|static|static-worker
 //	structpages-dev [-C dir] serve folder dynamic|static|static-worker
@@ -54,6 +56,8 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev test dynamic|static|static-worker\n"+
 			"       structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder\n"+
+			"       structpages-dev bench dynamic|static|static-worker\n"+
+			"       structpages-dev report\n"+
 			"       structpages-dev [-C dir] bench folder\n"+
 			"       structpages-dev [-C dir] serve folder dynamic|static|static-worker")
 		flag.PrintDefaults()
@@ -81,6 +85,8 @@ func main() {
 		os.Exit(bench(args))
 	case "serve":
 		os.Exit(serve(args))
+	case "report":
+		os.Exit(report(args))
 	default:
 		fmt.Fprintf(os.Stderr, "structpages-dev: unknown command %q\n", cmd)
 		flag.Usage()

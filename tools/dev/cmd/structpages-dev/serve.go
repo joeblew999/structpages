@@ -48,39 +48,56 @@ func serve(args []string) int {
 
 // serveBuild runs f's build for way, build/<way>, on addr until Ctrl-C.
 func serveBuild(f folder, way string) int {
-	// What its build task made: a binary, or for static-worker a Worker's
-	// folder, served in workerd.
+	s, err := startBuild(f, way, os.Stdout)
+	if err != nil {
+		fail(err)
+	}
+	onInterrupt(s.stop)
+	about := ""
+	if way != "dynamic" {
+		about = ", reading this generated code instead of reflect:" + listGenerated(f)
+	}
+	if s.wasm > 0 {
+		about = fmt.Sprintf(", %d KB of WebAssembly in workerd%s", s.wasm/1024, about)
+	}
+	fmt.Printf("%s, %s: http://%s%s\nCtrl-C stops it.\n", f.name, way, addr, about)
+	err = <-s.done
+	s.stop()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "structpages-dev: the server stopped:", err)
+		return 1
+	}
+	return 0
+}
+
+// startBuild starts f's build for way on addr, its output to out: what its
+// build task made, build/<way>, a binary, or for static-worker a Worker's
+// folder, run in workerd.
+func startBuild(f folder, way string, out io.Writer) (*server, error) {
 	built := filepath.Join(f.abs, "build", way)
 	cmd := exec.Command(built) //nolint:gosec // the folder's own build
 	if way == "static-worker" {
 		cmd = exec.Command("workerd", "serve", filepath.Join(built, "config.capnp")) //nolint:gosec // its own build
 		built = filepath.Join(built, "app.wasm")
 	}
-	if !fileExists(built) {
-		fail(fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", built, f.name, way))
+	info, err := os.Stat(built)
+	if err != nil {
+		return nil, fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", built, f.name, way)
 	}
 	if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
 		_ = c.Close()
-		fail(fmt.Errorf("%s is in use: stop what is on it first", addr))
+		return nil, fmt.Errorf("%s is in use: stop what is on it first", addr)
 	}
-	about := ""
-	if way != "dynamic" {
-		about = ", reading this generated code instead of reflect:" + listGenerated(f)
+	s := &server{cmd: cmd, done: make(chan error, 1)}
+	if way == "static-worker" {
+		s.wasm = info.Size()
 	}
-	if info, err := os.Stat(built); err == nil && way == "static-worker" {
-		about = fmt.Sprintf(", %d KB of WebAssembly in workerd%s", info.Size()/1024, about)
-	}
-	cmd.Dir, cmd.Stdout, cmd.Stderr = f.dir, os.Stdout, os.Stderr
+	cmd.Dir, cmd.Stdout, cmd.Stderr = f.dir, out, out
 	if err := cmd.Start(); err != nil {
-		fail(err)
+		return nil, err
 	}
-	onInterrupt(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	fmt.Printf("%s, %s: http://%s%s\nCtrl-C stops it.\n", f.name, way, addr, about)
-	if err := cmd.Wait(); err != nil {
-		fmt.Fprintln(os.Stderr, "structpages-dev: the server stopped:", err)
-		return 1
-	}
-	return 0
+	go func() { s.done <- cmd.Wait(); close(s.done) }()
+	return s, nil
 }
 
 // server is an app being served.

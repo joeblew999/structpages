@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -17,9 +18,18 @@ var (
 	benchmemArg = "-benchmem"
 )
 
-// bench is the bench command: a folder's benchmarks three ways, compared with
-// benchstat, into the folder's BENCH_GENERATED.md.
+// bench is the bench command. With a way, it is one step: the current
+// folder's benchmarks that way, in-process and, for an app, its build served,
+// into build/bench/ for report to compare. With a folder, it benchmarks the
+// folder three ways and writes its BENCH_GENERATED.md.
 func bench(args []string) int {
+	if len(args) == 1 && slices.Contains(ways, args[0]) {
+		if err := benchOne(newFolder("."), args[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "structpages-dev: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev bench folder")
 		return 2
@@ -218,7 +228,9 @@ what Cloudflare runs), timed over local HTTP by one standard Go client, so all t
 func stamp() string {
 	commit, _ := run(".", "git", "rev-parse", "--short", "HEAD")
 	s := "Commit " + strings.TrimSpace(commit)
-	diff := exec.Command("git", "diff", "--quiet", "HEAD", "--", ".", ":(exclude,glob)**/BENCH_GENERATED.md")
+	// The whole repository, wherever it runs from.
+	diff := exec.Command("git", "-C", root, "diff", "--quiet", "HEAD", "--", //nolint:gosec // git, on this repository
+		".", ":(exclude,glob)**/BENCH_GENERATED.md")
 	if err := diff.Run(); err != nil {
 		s += " + uncommitted changes"
 	}
@@ -247,4 +259,92 @@ func version(tool, arg string) string {
 		}
 	}
 	return strings.TrimSpace(out)
+}
+
+// benchOne is bench's one step: f's benchmarks one way, in-process, into
+// build/bench/<way>.txt, then, for an app, its build for the way served on
+// addr and timed over local HTTP by one standard Go client (e2e.Bench with
+// E2E_URL), so every way pays the same network cost, into
+// build/bench/<way>-served.txt.
+func benchOne(f folder, way string) error {
+	dir := filepath.Join(f.dir, "build", "bench")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
+	fmt.Printf("%s, %s: in-process...\n", f.name, way)
+	out, err := benchWay(f, way)
+	if err != nil {
+		return err
+	}
+	if werr := os.WriteFile(filepath.Join(dir, way+".txt"), []byte(out), 0o600); werr != nil {
+		return werr
+	}
+	if f.name == "library" {
+		return nil
+	}
+	fmt.Printf("%s, %s: served...\n", f.name, way)
+	s, err := startBuild(f, way, nil)
+	if err != nil {
+		return err
+	}
+	defer s.stop()
+	if werr := waitUp(s, time.Minute); werr != nil {
+		return fmt.Errorf("%s, %s: %w", f.dir, way, werr)
+	}
+	args := append(append([]string{"test"}, benchFlags...), ".")
+	cmd := exec.Command("go", args...) //nolint:gosec // the go toolchain, on the folder asked
+	cmd.Dir = f.dir
+	cmd.Env = append(os.Environ(), "E2E_URL=http://"+addr)
+	served, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s, served %s: %w\n%s", f.dir, way, err, failureLines(string(served)))
+	}
+	return os.WriteFile(filepath.Join(dir, way+"-served.txt"), served, 0o600)
+}
+
+// report is the report command: the current folder's benchmark numbers, from
+// its bench <way> steps, compared with benchstat into its BENCH_GENERATED.md.
+func report(args []string) int {
+	if len(args) != 0 {
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev report")
+		return 2
+	}
+	f := newFolder(".")
+	dir := filepath.Join(f.dir, "build", "bench")
+	read := func(suffix string) (map[string]string, error) {
+		outs := map[string]string{}
+		for _, way := range ways {
+			data, err := os.ReadFile(filepath.Join(dir, way+suffix))
+			if err != nil {
+				return nil, fmt.Errorf("%w: run bench %s first", err, way)
+			}
+			outs[way] = string(data)
+		}
+		return outs, nil
+	}
+	inProcess, err := read(".txt")
+	if err != nil {
+		fail(err)
+	}
+	table, err := benchstat(inProcess)
+	if err != nil {
+		fail(err)
+	}
+	served, wasm := "(the library is no app: nothing to serve)", ""
+	if f.name != "library" {
+		outs, rerr := read("-served.txt")
+		if rerr != nil {
+			fail(rerr)
+		}
+		if served, err = benchstat(outs); err != nil {
+			fail(err)
+		}
+		if info, serr := os.Stat(filepath.Join(f.dir, "build", "static-worker", "app.wasm")); serr == nil {
+			wasm = fmt.Sprintf("%d KB of", info.Size()/1024)
+		}
+	}
+	if err := writeBench(f, inProcess["dynamic"], table, served, wasm); err != nil {
+		fail(err)
+	}
+	return 0
 }

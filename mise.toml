@@ -212,18 +212,18 @@ raw = true
 quiet = true
 run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} serve examples/todo static-worker"
 
+[tasks."example:todo:bench"]
+description = "examples/todo, step 4: its benchmarks three ways, in-process and as served, into examples/todo/BENCH_GENERATED.md."
+depends = ["example:todo:generate"]
+quiet = true
+run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} bench examples/todo"
+
 # ---- Tests, three ways: the library and each example, the same way -------------------------------------------------
 #
 # An example's e2e_test.go crawls its app (the e2e package) and compares every response with
 # testdata/e2e.generated.txt, recorded from the dynamic build in its generate task. lint-misuse is a linter fixture: its tests
 # check the linter.
 
-
-[tasks."example:todo:bench"]
-description = "examples/todo, step 4: its benchmarks three ways, in-process and as served, into examples/todo/BENCH_GENERATED.md."
-depends = ["example:todo:generate"]
-quiet = true
-run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} bench examples/todo"
 [tasks.test]
 description = """The library's tests three ways (dynamic and static with the race detector, which TinyGo lacks): \
 a line with how many passed each way, then every test skipped, with why, and the first lines of any failure."""

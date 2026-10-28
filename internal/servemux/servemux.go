@@ -4,11 +4,10 @@
 
 // Package servemux is net/http's ServeMux as of Go 1.26, for builds whose
 // net/http still routes like Go 1.21's: TinyGo's (tinygo-org/net#55).
-// workers.NewMux returns one in the builds that read generated code (TinyGo,
-// and the standard toolchain's structpages_tables build, so the two differ
-// only in their compiler), and net/http's in the reflect build; structpages
-// itself is unchanged.
-// Delete it once TinyGo's net/http routes Go 1.22 patterns.
+// Mount registers its routes on one in the builds that read generated code
+// (TinyGo, and the standard toolchain's structpages_tables build, so the two
+// differ only in their compiler); routes_tinygo.go in the module root says
+// how, and when to delete this package.
 //
 // pattern.go, routing_tree.go, routing_index.go and mapping.go, and their
 // tests, are Go's own files, changed only in their package clause and in

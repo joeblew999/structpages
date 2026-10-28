@@ -62,15 +62,15 @@ func removeTodo(id int) {
 }
 
 // handler builds the app: the pages mounted on their own mux, with some
-// sample todos. main serves it; check_test.go calls it directly. workers
-// makes the same code run under TinyGo, as a Worker.
+// sample todos. main serves it (workers.Serve, which also serves it as a
+// Worker under TinyGo); check_test.go calls it directly.
 func handler() http.Handler {
 	// Add some sample todos
 	addTodo("Learn Go")
 	addTodo("Build a TODO app")
 	addTodo("Deploy to production")
 
-	mux := workers.NewMux()
+	mux := http.NewServeMux()
 	sp, err := structpages.Mount(mux, index{}, "/", "index",
 		// htmx 2.x: route HX-Target to the page's partials.
 		structpages.WithTargetSelector(structpages.HTMXRenderTarget),

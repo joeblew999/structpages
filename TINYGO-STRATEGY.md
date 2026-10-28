@@ -128,12 +128,13 @@ In order:
    whether it works. In parallel, follow [tinygo-org/net#56](https://github.com/tinygo-org/net/pull/56), which fixes
    method patterns but not escaped slashes.
 
-   **Status: done for `todo`.** `workers/servemux` is Go 1.26's `ServeMux` as Go wrote it, with Go's tests; they pass
-   with Go and under TinyGo (`mise run test:workers`). `workers.NewMux` returns it in the generated and TinyGo builds
-   (so those two differ only in their compiler) and `net/http`'s in the reflect build. `workers.Serve` serves on
-   `net/http` or, in a Worker, through workerd. `todo` calls both, and `tools/workers` writes the Worker's JavaScript
-   glue. structpages itself is unchanged. `todo`'s check passes all three ways, and served in workerd its toggle and
-   delete work and its state is kept. The other examples follow when they get `todo`'s shape.
+   **Status: routing works in `Mount`.** `internal/servemux` is Go 1.26's `ServeMux` as Go wrote it, with Go's tests,
+   which pass all three ways. In the generated and TinyGo builds `Mount` registers its routes on one and hands the
+   app's mux only the mount's prefix (`routes_tinygo.go`); the reflect build registers on the app's mux as before
+   (`routes_go.go`). So apps keep `http.NewServeMux()`, and generated and TinyGo differ only in their compiler.
+   `workers.Serve` serves on `net/http` or, in a Worker, through workerd, and `tools/workers` writes the Worker's
+   JavaScript glue. `todo`'s check passes all three ways, and served in workerd its toggle and delete work and its state
+   is kept. The other examples follow when they get `todo`'s shape.
 3. **Run the TinyGo way where it will really run.** Serve each example's handler from `workerd`, locally, through
    workers-go (go-htmx4 pins workerd and TinyGo in mise for this). Then the checker can also crawl it over HTTP, and
    the WebAssembly's start-up time and size per request can be measured; for Workers those matter more than

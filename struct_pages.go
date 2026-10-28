@@ -159,7 +159,7 @@ func Mount(mux Mux, page any, route, title string, options ...Option) (*StructPa
 
 	// Register all pages
 	middlewares := append([]MiddlewareFunc{withPcCtx(sp.pc), extractURLParams}, sp.middlewares...)
-	if err := sp.registerPageItem(mux, sp.pc.root, middlewares); err != nil {
+	if err := sp.registerPageItem(routesOn(mux, sp.pc.root), sp.pc.root, middlewares); err != nil {
 		return nil, err
 	}
 

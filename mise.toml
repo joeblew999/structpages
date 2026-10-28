@@ -61,12 +61,6 @@ if [ $code -ne 0 ]; then echo; grep -A12 -E '^[[:space:]]*--- FAIL' <<<"$out" | 
 exit $code
 '''
 
-[tasks."test:workers"]
-description = """workers/ tests: its servemux (Go 1.26's ServeMux with Go's own tests, which TinyGo apps mount on), \
-with Go, including that it answers like net/http's, and under TinyGo."""
-dir = "workers"
-run = ["go test -count=1 ./...", "tinygo test ./..."]
-
 # ---- The examples: tested three ways, and served three ways -----------------------------------------------------
 #
 # An example's check_test.go crawls its app (tools/check) and compares every response with

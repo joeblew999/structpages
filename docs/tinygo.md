@@ -53,8 +53,14 @@ way to find a missing table.
 TinyGo's `net/http` comes from [tinygo-org/net](https://github.com/tinygo-org/net), whose `ServeMux` still routes
 like Go 1.21's: a pattern with a method (`POST /add`), a wildcard (`{id}`) or `{$}` never matches
 ([net#55](https://github.com/tinygo-org/net/issues/55); a fix waits in [net#56](https://github.com/tinygo-org/net/pull/56)).
-structpages registers Go 1.22 patterns, so in a TinyGo build give `Mount` a mux that understands them: anything with
-`Handle(pattern string, handler http.Handler)`, such as a copy of Go's own `ServeMux`.
+structpages registers Go 1.22 patterns, so in a TinyGo build `Mount` routes them itself, through its own copy of Go's
+`ServeMux` (`internal/servemux`): give it any mux, `http.NewServeMux()` included. The `structpages_tables` build does the
+same on the standard toolchain, so it differs from a TinyGo build only in the compiler.
+
+Your mux then sees only the mount's prefix (`/`, or `/admin` and `/admin/`), so one difference from the standard build:
+a handler of your own on the same mux that is more specific than that prefix but less specific than a page's route
+takes the page's requests (your `/admin/` over a page's `/admin/settings`, mounted at `/`), and a route your mux would
+reject as a conflict isn't one. Mount on a mux of its own, or keep your handlers outside the mount's paths.
 
 ## When TinyGo catches up
 

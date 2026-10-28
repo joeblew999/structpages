@@ -181,8 +181,11 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 | `mise run bench` / `bench:tables` / `bench:tinygo` | the benchmarks the same three ways |
 | `mise run bench:compare` | all three benchmark runs, compared with benchstat into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md) |
 | `mise run ci:go` | everything CI checks on standard Go |
-| `mise run example:simple` (`blog`, `htmx`, `todo`, ...) | one example app, served on http://localhost:8080 |
+| `mise run example:simple` (`blog`, `htmx`, `todo`, ...) | one example app, served on http://localhost:8080 with reflect |
+| `mise run example:simple:tables` (and the rest) | the same app from its generated tables, no method reflection |
+| `mise run test:examples` / `test:examples:tables` | every example's tests, with reflect / from generated tables |
 | `mise run gen:examples` / `lint:examples` | structpages-gen (`tools/gen`) or structpages-lint (`tools/lint`) over every example |
+| `mise run clean:generated` | delete every generated table (`structpages_tables*.generated*.go`) |
 
 On standard Go the tables come out about even with `reflect` overall: faster for `ID`, slower for `Mount` and `URLFor`
 (see the comparison). They are there for TinyGo, not for speed.

@@ -125,50 +125,143 @@ for d in examples/*/; do
 done
 '''
 
-# One task per example app, serving it on http://localhost:8080 until Ctrl-C. gsx examples regenerate their
-# .x.go first, so edits to .gsx files show up. (lint-misuse is a linter fixture: it never serves.)
+[tasks."test:examples:tables"]
+description = """For each example: regenerate gsx output, generate its tables (its tests' too), then build and test \
+it without method reflection (-tags structpages_tables). Compare with test:examples."""
+run = '''
+fail=0
+for d in examples/*/; do
+  echo "== $d"
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
+    (cd "$d" && go tool gsx generate -q .) || fail=1
+  fi
+  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test ./... || fail=1
+  (cd "$d" && go build -tags structpages_tables -o /dev/null ./... && go test -tags structpages_tables ./...) || fail=1
+done
+exit $fail
+'''
+
+[tasks."clean:generated"]
+description = "Delete every table structpages-gen wrote (structpages_tables*.generated*.go), in the library and the examples."
+run = "find . -name 'structpages_tables*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'"
+
+# Each example app two ways, served on http://localhost:8080 until Ctrl-C:
+#   example:<name>         the normal build: structpages reads the app's methods through reflect
+#   example:<name>:tables  generated: structpages-gen writes the app's tables first, and it reads those instead
+#                          (-tags structpages_tables: TinyGo's code path, on standard Go)
+# The generated files only build with that tag, so both work whether they exist or not.
+# lint-misuse is a linter fixture and never serves.
+
+[tasks._example]
+description = "Serve examples/<name> on :8080: with reflect, or (mode tables) from generated tables."
+hide = true
+raw = true
+quiet = true
+usage = '''
+arg "<name>" help="the example's folder under examples/"
+arg "[mode]" help="reflect or tables" default="reflect"
+'''
+run = '''
+set -eu
+cd "examples/$usage_name"
+if grep -q 'gsxhq/gsx/cmd/gsx' go.mod; then go tool gsx generate -q .; fi
+case "$usage_mode" in
+reflect)
+  echo "examples/$usage_name: http://localhost:8080, the normal build (methods read through reflect). Ctrl-C stops it."
+  exec go run . ;;
+tables)
+  go run -C "{{config_root}}/tools/gen" ./cmd/structpages-gen -C "$PWD" ./...
+  echo "examples/$usage_name: http://localhost:8080, reading these generated tables instead of reflect:"
+  find . -name 'structpages_tables*.generated*.go' | sed 's|^\./|  |'
+  echo "Ctrl-C stops it."
+  exec go run -tags structpages_tables . ;;
+*) echo "mode is reflect or tables, not $usage_mode" >&2; exit 2 ;;
+esac
+'''
 
 [tasks."example:blog"]
-description = "Serve examples/blog on http://localhost:8080 (Ctrl-C stops it)."
-dir = "examples/blog"
+description = "Serve examples/blog on :8080, the normal build (reflect)."
 raw = true
-run = ["go tool gsx generate -q .", "echo 'examples/blog: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+quiet = true
+run = "mise run _example blog"
+
+[tasks."example:blog:tables"]
+description = "Serve examples/blog on :8080 from generated tables (no method reflection)."
+raw = true
+quiet = true
+run = "mise run _example blog tables"
 
 [tasks."example:html-template"]
-description = "Serve examples/html-template on http://localhost:8080 (Ctrl-C stops it)."
-dir = "examples/html-template"
+description = "Serve examples/html-template on :8080, the normal build (reflect)."
 raw = true
-run = ["echo 'examples/html-template: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+quiet = true
+run = "mise run _example html-template"
+
+[tasks."example:html-template:tables"]
+description = "Serve examples/html-template on :8080 from generated tables (no method reflection)."
+raw = true
+quiet = true
+run = "mise run _example html-template tables"
 
 [tasks."example:htmx"]
-description = "Serve examples/htmx on http://localhost:8080 (Ctrl-C stops it)."
-dir = "examples/htmx"
+description = "Serve examples/htmx on :8080, the normal build (reflect)."
 raw = true
-run = ["go tool gsx generate -q .", "echo 'examples/htmx: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+quiet = true
+run = "mise run _example htmx"
+
+[tasks."example:htmx:tables"]
+description = "Serve examples/htmx on :8080 from generated tables (no method reflection)."
+raw = true
+quiet = true
+run = "mise run _example htmx tables"
 
 [tasks."example:htmx-render-target"]
-description = "Serve examples/htmx-render-target on http://localhost:8080 (Ctrl-C stops it)."
-dir = "examples/htmx-render-target"
+description = "Serve examples/htmx-render-target on :8080, the normal build (reflect)."
 raw = true
-run = ["go tool gsx generate -q .", "echo 'examples/htmx-render-target: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+quiet = true
+run = "mise run _example htmx-render-target"
+
+[tasks."example:htmx-render-target:tables"]
+description = "Serve examples/htmx-render-target on :8080 from generated tables (no method reflection)."
+raw = true
+quiet = true
+run = "mise run _example htmx-render-target tables"
 
 [tasks."example:simple"]
-description = "Serve examples/simple on http://localhost:8080 (Ctrl-C stops it)."
-dir = "examples/simple"
+description = "Serve examples/simple on :8080, the normal build (reflect)."
 raw = true
-run = ["go tool gsx generate -q .", "echo 'examples/simple: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+quiet = true
+run = "mise run _example simple"
+
+[tasks."example:simple:tables"]
+description = "Serve examples/simple on :8080 from generated tables (no method reflection)."
+raw = true
+quiet = true
+run = "mise run _example simple tables"
 
 [tasks."example:todo"]
-description = "Serve examples/todo on http://localhost:8080 (Ctrl-C stops it)."
-dir = "examples/todo"
+description = "Serve examples/todo on :8080, the normal build (reflect)."
 raw = true
-run = ["go tool gsx generate -q .", "echo 'examples/todo: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+quiet = true
+run = "mise run _example todo"
+
+[tasks."example:todo:tables"]
+description = "Serve examples/todo on :8080 from generated tables (no method reflection)."
+raw = true
+quiet = true
+run = "mise run _example todo tables"
 
 [tasks."example:url-validation"]
-description = "Serve examples/url-validation on http://localhost:8080 (Ctrl-C stops it)."
-dir = "examples/url-validation"
+description = "Serve examples/url-validation on :8080, the normal build (reflect)."
 raw = true
-run = ["echo 'examples/url-validation: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+quiet = true
+run = "mise run _example url-validation"
+
+[tasks."example:url-validation:tables"]
+description = "Serve examples/url-validation on :8080 from generated tables (no method reflection)."
+raw = true
+quiet = true
+run = "mise run _example url-validation tables"
 
 [tasks."lint:examples"]
 description = "Run structpages-lint, built from tools/lint, over every example but lint-misuse (its misuses are deliberate; its own test checks them)."

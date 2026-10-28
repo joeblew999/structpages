@@ -177,14 +177,16 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 | Task | Runs |
 |---|---|
 | `mise run parity` | the suite on Go and TinyGo, listing what passes on Go but not on TinyGo |
-| `mise run test` / `test:tables` / `test:tinygo` | the test suite on reflect, on the tables, and under TinyGo |
-| `mise run bench` / `bench:tables` / `bench:tinygo` | the benchmarks the same three ways |
+| `mise run test` / `test:generated` / `test:tinygo` | the test suite three ways: Go with reflect, Go generated, TinyGo |
+| `mise run bench` / `bench:generated` / `bench:tinygo` | the benchmarks the same three ways |
 | `mise run bench:compare` | all three benchmark runs, compared with benchstat into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md) |
 | `mise run ci:go` | everything CI checks on standard Go |
 | `mise run example:simple` (`blog`, `htmx`, `todo`, ...) | one example app, served on http://localhost:8080 with reflect |
-| `mise run example:simple:tables` (and the rest) | the same app from its generated tables, no method reflection |
-| `mise run test:examples` / `test:examples:tables` / `test:examples:tinygo` | every example's tests three ways: Go with reflect, Go generated, TinyGo |
+| `mise run example:simple:generated` (and the rest) | the same app from its generated code, no method reflection |
+| `mise run test:examples` / `test:examples:generated` / `test:examples:tinygo` | every example's tests three ways: Go with reflect, Go generated, TinyGo |
 | `mise run build:examples:tinygo` | every example built with TinyGo, natively and as WebAssembly, with sizes |
+| `mise run check:examples` | every example with a check (`check_test.go`) crawled three ways and compared with its recording, as a grid |
+| `mise run check:examples:update` | re-record those checks from the reflection build |
 | `mise run gen:examples` / `lint:examples` | structpages-gen (`tools/gen`) or structpages-lint (`tools/lint`) over every example |
 | `mise run clean:generated` | delete every generated table (`structpages_tables*.generated*.go`) |
 

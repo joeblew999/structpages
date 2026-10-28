@@ -60,13 +60,16 @@ func removeTodo(id int) {
 	delete(todoStore, id)
 }
 
-func main() {
+// handler builds the app: the pages mounted on their own mux, with some
+// sample todos. main serves it; check_test.go calls it directly.
+func handler() http.Handler {
 	// Add some sample todos
 	addTodo("Learn Go")
 	addTodo("Build a TODO app")
 	addTodo("Deploy to production")
 
-	sp, err := structpages.Mount(nil, index{}, "/", "index",
+	mux := http.NewServeMux()
+	sp, err := structpages.Mount(mux, index{}, "/", "index",
 		// htmx 2.x: route HX-Target to the page's partials.
 		structpages.WithTargetSelector(structpages.HTMXRenderTarget),
 		structpages.WithErrorHandler(errorHandler),
@@ -75,8 +78,13 @@ func main() {
 		log.Fatalf("Failed to mount pages: %v", err)
 	}
 	_ = sp // sp provides URLFor and IDFor methods
+	return mux
+}
+
+func main() {
+	h := handler()
 	log.Println("Starting TODO app on :8080")
-	http.ListenAndServe(":8080", nil) // nil uses http.DefaultServeMux
+	http.ListenAndServe(":8080", h)
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {

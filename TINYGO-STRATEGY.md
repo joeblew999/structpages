@@ -94,6 +94,13 @@ In order:
      `go test`, `go test -tags structpages_tables`, `tinygo test`. The reflection run is the reference: any response
      that differs in the other two is a failure. It finds each example's routes by itself, so there are no per-example
      lists to keep up, and it needs no sockets, so TinyGo can run it.
+
+     **Status: built, and tried on one example first.** The checker is `tools/check` (`check.Crawl`, no dependencies,
+     its own module like `tools/gen`). `todo` has its `handler()` and a one-line `check_test.go`; its recording is
+     `testdata/check.generated.txt`. The crawl found all eight of its requests by itself: the page, `POST /add`, and
+     toggle and delete for each todo, as htmx partials. `mise run check:examples` shows: reflection pass, generated
+     pass, **TinyGo fail at `POST /toggle/3`**, which answers 200 without toggling: the `{id}` wildcard is lost under
+     TinyGo's mux. Once this shape is agreed, the other seven examples follow it.
    - **Later, a browser.** For click-through checks of htmx behaviour, chromedp with mise-pinned Chrome for Testing
      (`chrome-headless-shell`), as go-htmx4's `e2e` module does.
 2. **Make routing work under TinyGo.** It is most of the library's gap and it breaks real apps (`url-validation`).
@@ -134,11 +141,12 @@ In order:
 ## Checking progress
 
 ```bash
-mise run parity                 # library: what still differs between Go and TinyGo
-mise run test:examples          # examples' tests, Go, reflection
-mise run test:examples:tables   # examples' tests, Go, generated
-mise run test:examples:tinygo   # examples' tests, TinyGo
-mise run build:examples:tinygo  # every example built with TinyGo, natively and as WebAssembly, with sizes
-mise run bench:compare          # Go, reflection vs Go, generated vs TinyGo, into BENCH-COMPARE.GENERATED.md
-mise run ci:go                  # everything upstream's CI checks on Go
+mise run parity                   # library: what still differs between Go and TinyGo
+mise run check:examples           # examples with a check, crawled three ways: a pass/fail grid
+mise run test:examples            # examples' tests, Go, reflection
+mise run test:examples:generated  # examples' tests, Go, generated
+mise run test:examples:tinygo     # examples' tests, TinyGo
+mise run build:examples:tinygo    # every example built with TinyGo, natively and as WebAssembly, with sizes
+mise run bench:compare            # Go, reflection vs Go, generated vs TinyGo, into BENCH-COMPARE.GENERATED.md
+mise run ci:go                    # everything upstream's CI checks on Go
 ```

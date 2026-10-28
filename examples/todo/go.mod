@@ -12,6 +12,7 @@ require (
 	github.com/editorconfig/editorconfig-core-go/v2 v2.6.4 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/jackielii/ctxkey v1.0.1 // indirect
+	github.com/jackielii/structpages/tools/check v0.0.0
 	github.com/tdewolff/minify/v2 v2.24.13 // indirect
 	github.com/tdewolff/parse/v2 v2.8.13 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260611194520-c48552f49976 // indirect
@@ -25,3 +26,5 @@ require (
 replace github.com/jackielii/structpages => ../..
 
 tool github.com/gsxhq/gsx/cmd/gsx
+
+replace github.com/jackielii/structpages/tools/check => ../../tools/check

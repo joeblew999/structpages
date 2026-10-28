@@ -103,6 +103,7 @@ jobs:
         run: |
           go vet ./...
           go vet -C tools/gen ./...
+          go vet -C tools/check ./...
 
       # Note: staticcheck is handled by golangci-lint job with proper test exclusions
 
@@ -129,6 +130,13 @@ jobs:
         with:
           version: latest
           working-directory: tools/gen
+          args: --timeout=5m
+
+      - name: golangci-lint (tools/check)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          working-directory: tools/check
           args: --timeout=5m
 
   test-examples:

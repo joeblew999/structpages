@@ -533,6 +533,7 @@ func TestMiddlewareErrorHandling(t *testing.T) {
 
 // Test middleware with different HTTP methods
 func TestMiddlewareWithHTTPMethods(t *testing.T) {
+	requireMuxPatterns(t)
 	type topPage struct {
 		getPage  methodPage `route:"GET /method Method GET"`
 		postPage methodPage `route:"POST /method Method POST"`
@@ -588,6 +589,7 @@ func TestMiddlewareWithHTTPMethods(t *testing.T) {
 
 // Test middleware access to PageNode information
 func TestMiddlewarePageNodeAccess(t *testing.T) {
+	requireMuxPatterns(t)
 	type topPage struct {
 		infoPage `route:"POST /info Info Page Title"`
 	}

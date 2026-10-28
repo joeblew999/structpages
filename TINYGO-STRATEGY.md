@@ -88,7 +88,8 @@ Apple M2 Pro:
   30µs under TinyGo.
 - **As a Worker in workerd**, what Cloudflare bills is the server's CPU per request: `todo`'s `GET /` took about 2.5 ms
   of it as TinyGo ships, because TinyGo's runtime collected garbage at every await ([tinygo#5800](https://github.com/tinygo-org/tinygo/issues/5800)).
-  `structpages-workers` now builds with that patched out, as charter does: about 0.43 ms, 82% less. An 8 MB starting
+  The Worker builds now use a TinyGo with that patched out, as charter does, which mise's `tools:tinygo` makes
+  (`structpages-workers tinygo`): about 0.43 ms, 82% less. An 8 MB starting
   heap alone changes nothing measurable. The remaining gap to the 34µs in-process is the trip into and out of the
   Worker (workerd, the JavaScript glue, workers-go's request conversion); fewer crossings between JavaScript and Go,
   and runtimes started while the module loads (a cold start is about 40 ms), are the next things to measure.

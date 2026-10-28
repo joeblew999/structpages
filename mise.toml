@@ -38,6 +38,13 @@ sources = ["tools/dev/**/*.go", "tools/dev/go.mod", "e2e/*.go"]
 outputs = ["build/bin/structpages-dev"]
 run = "go build -C tools/dev -o {{config_root}}/build/bin/structpages-dev ./cmd/structpages-dev"
 
+[tasks."tools:tinygo"]
+description = """TinyGo, as mise installs it, with its collection at every await patched out (tinygo#5800), in \
+build/tinygo: what the Worker builds use. Made again only when mise.toml or structpages-workers changes."""
+sources = ["mise.toml", "tools/workers/cmd/structpages-workers/main.go"]
+outputs = ["build/tinygo/.patched"]
+run = "go run -C tools/workers ./cmd/structpages-workers tinygo -o {{config_root}}/build/tinygo"
+
 # ---- The library (the root folder): its tasks, one per step, in the order they run ---------------------------------
 #
 # Each task runs in the root folder, after the tasks it depends on:
@@ -179,9 +186,9 @@ run = "structpages-dev serve static"
 
 [tasks."example:blog:build:static-worker"]
 description = "blog: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
-depends = ["example:blog:generate"]
+depends = ["example:blog:generate", "tools:tinygo"]
 dir = "examples/blog"
-run = "go tool structpages-workers -o build/static-worker"
+run = "go tool structpages-workers -o build/static-worker -tinygoroot ../../build/tinygo"
 
 [tasks."example:blog:serve:static-worker"]
 description = "blog: serve its static-worker build in workerd on :8080 until Ctrl-C."
@@ -408,9 +415,9 @@ run = "structpages-dev serve static"
 
 [tasks."example:htmx:build:static-worker"]
 description = "htmx: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
-depends = ["example:htmx:generate"]
+depends = ["example:htmx:generate", "tools:tinygo"]
 dir = "examples/htmx"
-run = "go tool structpages-workers -o build/static-worker"
+run = "go tool structpages-workers -o build/static-worker -tinygoroot ../../build/tinygo"
 
 [tasks."example:htmx:serve:static-worker"]
 description = "htmx: serve its static-worker build in workerd on :8080 until Ctrl-C."
@@ -538,9 +545,9 @@ run = "structpages-dev serve static"
 
 [tasks."example:htmx-render-target:build:static-worker"]
 description = "htmx-render-target: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
-depends = ["example:htmx-render-target:generate"]
+depends = ["example:htmx-render-target:generate", "tools:tinygo"]
 dir = "examples/htmx-render-target"
-run = "go tool structpages-workers -o build/static-worker"
+run = "go tool structpages-workers -o build/static-worker -tinygoroot ../../build/tinygo"
 
 [tasks."example:htmx-render-target:serve:static-worker"]
 description = "htmx-render-target: serve its static-worker build in workerd on :8080 until Ctrl-C."
@@ -707,9 +714,9 @@ run = "structpages-dev serve static"
 
 [tasks."example:simple:build:static-worker"]
 description = "simple: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
-depends = ["example:simple:generate"]
+depends = ["example:simple:generate", "tools:tinygo"]
 dir = "examples/simple"
-run = "go tool structpages-workers -o build/static-worker"
+run = "go tool structpages-workers -o build/static-worker -tinygoroot ../../build/tinygo"
 
 [tasks."example:simple:serve:static-worker"]
 description = "simple: serve its static-worker build in workerd on :8080 until Ctrl-C."
@@ -761,8 +768,8 @@ run = "structpages-dev report"
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# todo also builds its Worker three more ways, each without one or both of structpages-workers' switches,
-# and times each after bench:static-worker, so its report shows what each switch saves.
+# todo also builds its Worker three more ways, without the patched TinyGo (tools:tinygo), the 8 MB starting
+# heap, or both, and times each after bench:static-worker, so its report shows what each saves.
 # Builds go in examples/todo/build/ (gitignored).
 # `mise tasks deps example:todo:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -839,9 +846,9 @@ run = "structpages-dev serve static"
 
 [tasks."example:todo:build:static-worker"]
 description = "todo: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
-depends = ["example:todo:generate"]
+depends = ["example:todo:generate", "tools:tinygo"]
 dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker"
+run = "go tool structpages-workers -o build/static-worker -tinygoroot ../../build/tinygo"
 
 [tasks."example:todo:serve:static-worker"]
 description = "todo: serve its static-worker build in workerd on :8080 until Ctrl-C."
@@ -851,22 +858,22 @@ raw = true
 run = "structpages-dev serve static-worker"
 
 [tasks."example:todo:build:static-worker-plain"]
-description = "todo: build its Worker as TinyGo ships (no starting heap, no collector patch), into build/static-worker-plain/, to measure."
+description = "todo: build its Worker as TinyGo ships (no starting heap, the TinyGo installed), into build/static-worker-plain/, to measure."
 depends = ["example:todo:generate"]
 dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker-plain -heap 0 -gcpatch=false"
+run = "go tool structpages-workers -o build/static-worker-plain -heap 0"
 
 [tasks."example:todo:build:static-worker-heap"]
-description = "todo: build its Worker with the 8 MB starting heap only, into build/static-worker-heap/, to measure."
+description = "todo: build its Worker with the 8 MB starting heap only (the TinyGo installed), into build/static-worker-heap/, to measure."
 depends = ["example:todo:generate"]
 dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker-heap -gcpatch=false"
+run = "go tool structpages-workers -o build/static-worker-heap"
 
 [tasks."example:todo:build:static-worker-gcpatch"]
-description = "todo: build its Worker with the collector patch only, into build/static-worker-gcpatch/, to measure."
-depends = ["example:todo:generate"]
+description = "todo: build its Worker with the patched TinyGo only (no starting heap), into build/static-worker-gcpatch/, to measure."
+depends = ["example:todo:generate", "tools:tinygo"]
 dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker-gcpatch -heap 0"
+run = "go tool structpages-workers -o build/static-worker-gcpatch -heap 0 -tinygoroot ../../build/tinygo"
 
 [tasks."example:todo:build"]
 description = "todo: build it all three ways, and its Worker's three variants."
@@ -897,21 +904,21 @@ dir = "examples/todo"
 run = "structpages-dev bench static-worker"
 
 [tasks."example:todo:bench:static-worker-plain"]
-description = "todo: time its Worker as TinyGo ships (no starting heap, no collector patch): served and started, into build/bench/."
+description = "todo: time its Worker as TinyGo ships (no starting heap, the TinyGo installed): served and started, into build/bench/."
 depends = ["example:todo:build:static-worker-plain", "tools:dev"]
 wait_for = ["example:todo:build", "example:todo:bench:static-worker"]
 dir = "examples/todo"
 run = "structpages-dev bench static-worker static-worker-plain"
 
 [tasks."example:todo:bench:static-worker-heap"]
-description = "todo: time its Worker with the 8 MB starting heap only: served and started, into build/bench/."
+description = "todo: time its Worker with the 8 MB starting heap only (the TinyGo installed): served and started, into build/bench/."
 depends = ["example:todo:build:static-worker-heap", "tools:dev"]
 wait_for = ["example:todo:build", "example:todo:bench:static-worker-plain"]
 dir = "examples/todo"
 run = "structpages-dev bench static-worker static-worker-heap"
 
 [tasks."example:todo:bench:static-worker-gcpatch"]
-description = "todo: time its Worker with the collector patch only: served and started, into build/bench/."
+description = "todo: time its Worker with the patched TinyGo only (no starting heap): served and started, into build/bench/."
 depends = ["example:todo:build:static-worker-gcpatch", "tools:dev"]
 wait_for = ["example:todo:build", "example:todo:bench:static-worker-heap"]
 dir = "examples/todo"
@@ -1002,9 +1009,9 @@ run = "structpages-dev serve static"
 
 [tasks."example:url-validation:build:static-worker"]
 description = "url-validation: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
-depends = ["example:url-validation:generate"]
+depends = ["example:url-validation:generate", "tools:tinygo"]
 dir = "examples/url-validation"
-run = "go tool structpages-workers -o build/static-worker"
+run = "go tool structpages-workers -o build/static-worker -tinygoroot ../../build/tinygo"
 
 [tasks."example:url-validation:serve:static-worker"]
 description = "url-validation: serve its static-worker build in workerd on :8080 until Ctrl-C."

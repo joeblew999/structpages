@@ -189,7 +189,7 @@ does that one step: a test summary, a benchmark, a report or a server.
 | `mise run test` / `test:dynamic` / `test:static` / `test:static-worker` | the library's tests, all three ways or one, a line each with every test skipped and why |
 | `mise run example:todo:test` / `example:todo:test:dynamic` / … | an example's tests, all its ways or one |
 | `mise run example:todo:serve:dynamic` / `example:todo:serve:static` / `example:todo:serve:static-worker` | serve an example's build on http://localhost:8080 (static-worker: WebAssembly in workerd) |
-| `mise run bench` / `example:todo:bench` | benchmarks, each way one at a time: in-process, and for an app served (the time and the server's CPU per request) and started; todo's also compares its Worker built without each of `structpages-workers`' switches. Into that folder's `BENCH_GENERATED.md` ([the library's](./BENCH_GENERATED.md), [todo's](./examples/todo/BENCH_GENERATED.md)) |
+| `mise run bench` / `example:todo:bench` | benchmarks, each way one at a time: in-process, and for an app served (the time and the server's CPU per request) and started; todo's also compares its Worker built without the patched TinyGo (`tools:tinygo`), the starting heap, or both. Into that folder's `BENCH_GENERATED.md` ([the library's](./BENCH_GENERATED.md), [todo's](./examples/todo/BENCH_GENERATED.md)) |
 | `mise run examples` / `bench:examples` | every example's tests / benchmarks |
 | `mise run generated:check` | fail if a generated file changed and isn't committed |
 | `mise run lint:examples` | structpages-lint (`tools/lint`) over every example |

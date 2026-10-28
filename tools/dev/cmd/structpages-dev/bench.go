@@ -32,9 +32,9 @@ const (
 	startRuns  = 6
 )
 
-// variants are todo's other Worker builds, each without one or both of
-// structpages-workers' switches, so the report shows what each saves; the
-// static-worker build has both.
+// variants are todo's other Worker builds, each without the patched TinyGo
+// (mise's tools:tinygo), the 8 MB starting heap, or both, so the report shows
+// what each saves; the static-worker build has both.
 var variants = []string{"static-worker-plain", "static-worker-heap", "static-worker-gcpatch"}
 
 // bench is the bench command, one step: the current folder's benchmarks one
@@ -311,9 +311,9 @@ var wayDescriptions = map[string]string{
 	"dynamic":               "standard Go, structpages finding the app's methods at run time, with reflect",
 	"static":                "standard Go, methods known at compile time from generated code (-tags structpages_static)",
 	"static-worker":         "a Cloudflare Worker, TinyGo WebAssembly, static too",
-	"static-worker-plain":   "the Worker as TinyGo ships: its own heap, its collector unpatched (-heap 0 -gcpatch=false)",
-	"static-worker-heap":    "the Worker with the 8 MB starting heap only (-gcpatch=false)",
-	"static-worker-gcpatch": "the Worker with the collector patch only (-heap 0)",
+	"static-worker-plain":   "the Worker as TinyGo ships: the TinyGo installed, its own heap (-heap 0)",
+	"static-worker-heap":    "the Worker with the 8 MB starting heap only: the TinyGo installed",
+	"static-worker-gcpatch": "the Worker with the patched TinyGo only, mise's tools:tinygo (-heap 0 -tinygoroot)",
 }
 
 // benchReport is a folder's BENCH_GENERATED.md: benchstat's tables, and what
@@ -368,7 +368,7 @@ func (r *benchReport) write(dynamic string) error {
 		b.WriteString("\n## The Worker\n\n" + r.worker + "\n")
 	}
 	if r.variantsServed != "" {
-		b.WriteString("\nThe Worker built four ways, to show what each of structpages-workers' switches saves, " +
+		b.WriteString("\nThe Worker built four ways, to show what the patched TinyGo and the starting heap each save, " +
 			"served and started as\nabove, compared with the first:\n\n")
 		for _, v := range append(slices.Clone(variants), "static-worker") {
 			fmt.Fprintf(&b, "- %s: %s\n", v, wayDescriptions[v])

@@ -6,7 +6,7 @@
 - static: standard Go, methods known at compile time from generated code (-tags structpages_static)
 - static-worker: a Cloudflare Worker, TinyGo WebAssembly, static too
 
-Commit 5e1c86b, 2026-10-28T13:01Z.
+Commit 34c6786 + uncommitted changes, 2026-10-28T13:56Z.
 go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
 6 runs of 200ms each.
 
@@ -17,11 +17,11 @@ Each way's test binary calls the code directly (TinyGo's natively, and it report
 ```
          │   dynamic    │               static               │            static-worker             │
          │    sec/op    │   sec/op     vs base               │    sec/op     vs base                │
-E2E/GET_   10.408µ ± 8%   8.043µ ± 8%  -22.73% (p=0.002 n=6)   33.952µ ± 5%  +226.21% (p=0.002 n=6)
+E2E/GET_   10.012µ ± 1%   7.629µ ± 7%  -23.80% (p=0.002 n=6)   33.907µ ± 0%  +238.68% (p=0.002 n=6)
 
          │   dynamic    │               static                │            static-worker             │
          │     B/op     │     B/op      vs base               │     B/op      vs base                │
-E2E/GET_   14.15Ki ± 0%   12.44Ki ± 0%  -12.06% (p=0.002 n=6)   31.31Ki ± 0%  +121.36% (p=0.002 n=6)
+E2E/GET_   14.15Ki ± 0%   12.44Ki ± 0%  -12.06% (p=0.002 n=6)   31.31Ki ± 0%  +121.37% (p=0.002 n=6)
 
          │  dynamic   │              static               │
          │ allocs/op  │ allocs/op   vs base               │
@@ -31,16 +31,17 @@ E2E/GET_   169.0 ± 0%   133.0 ± 0%  -21.30% (p=0.002 n=6)
 ## As served
 
 Each way served on :8080 as its example:todo:serve:<way> task serves it (static-worker: 1504 KB of WebAssembly in workerd,
-what Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
+what Cloudflare runs), timed over local HTTP
+by one standard Go client, so every way pays the same network cost.
 
 ```
          │   dynamic   │              static               │              static-worker              │
          │   sec/op    │   sec/op     vs base              │     sec/op      vs base                 │
-E2E/GET_   71.28µ ± 1%   66.44µ ± 4%  -6.79% (p=0.002 n=6)   2660.90µ ± 52%  +3633.28% (p=0.002 n=6)
+E2E/GET_   67.60µ ± 1%   64.06µ ± 2%  -5.25% (p=0.002 n=6)   2555.81µ ± 52%  +3680.64% (p=0.002 n=6)
 
          │   dynamic    │            static             │           static-worker            │
          │     B/op     │     B/op      vs base         │     B/op      vs base              │
-E2E/GET_   45.82Ki ± 0%   45.82Ki ± 0%  ~ (p=0.595 n=6)   45.79Ki ± 0%  -0.07% (p=0.002 n=6)
+E2E/GET_   45.82Ki ± 0%   45.82Ki ± 0%  ~ (p=0.054 n=6)   45.78Ki ± 0%  -0.09% (p=0.002 n=6)
 
          │  dynamic   │            static             │          static-worker           │
          │ allocs/op  │ allocs/op   vs base           │ allocs/op   vs base              │

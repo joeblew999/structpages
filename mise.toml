@@ -6,21 +6,26 @@
 #   generated  standard Go, -tags structpages_generated: it reads code structpages-gen generates instead
 #   tinygo     TinyGo, which always reads the generated code
 #
-# THE ORDER. Some files are made from others, so they are made in an order, each step reading what the one before
-# it wrote:
+# THE ORDER. Each step reads what the steps before it wrote. A folder's generate task does 1 to 3, and every other
+# task on the folder depends on it, so mise runs it first: nothing has to be remembered or run by hand.
 #   1. gsx              .gsx templates                 -> .x.go                       (the examples using gsx)
 #   2. structpages-gen  the Go code, .x.go included    -> structpages.generated.go    (every folder)
 #   3. e2e              the app, built the reflect way -> testdata/e2e.generated.txt  (the examples with an e2e_test.go)
-#   4. then build, and test, benchmark or serve, any way.
-# Every folder (the library, ., and each example) has a generate task doing 1 to 3 in that order, and every task on
-# a folder depends on its generate task, so mise runs it first: nothing has to be remembered or run by hand.
+#   4. structpages-dev (tools/dev), on one folder, reading what 1 to 3 made. It writes nothing but BENCH_GENERATED.md:
+#      test   for each way (reflect, generated, tinygo): build every package, then run the tests (an app's e2e test
+#             compares every response with 3); then print a line: how many passed each way, what was skipped, why
+#      bench  for each way: run the benchmarks in-process (an app's: the GETs in 3), then compare the ways with
+#             benchstat. Then, for an app serving through workers.Serve, for each way: build it into a temporary
+#             folder, start it on :8080 (tinygo: in workerd), time the same GETs over HTTP, stop it, delete the folder;
+#             compare with benchstat. Then write BENCH_GENERATED.md
+#      serve  build the app one way: go run (reflect, generated), or for tinygo into a temporary folder: workers-go's
+#             glue, structpages-workers' worker.mjs and config.capnp, then tinygo build. Start it on :8080 (tinygo: in
+#             workerd); Ctrl-C stops it and deletes the folder
 #
 # What generate makes is committed for the examples, as upstream commits .x.go: commit it with the code it comes
 # from (generated:check, and so ci:go, fails until you have). A change to testdata/e2e.generated.txt is a change in
 # what the app answers: review its diff. The library's generated files are for its own tests only and gitignored.
-#
-# The other tasks run structpages-dev (tools/dev) on one folder, doing the same steps every way: build, then test,
-# benchmark or serve. A task over several folders lists them, a line each.
+# A task over several folders lists them, a line each.
 
 [tools]
 go = "1.26"

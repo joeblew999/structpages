@@ -126,7 +126,7 @@ run = "go -C examples/todo tool gsx generate -q -no-cache ."
 [tasks."example:todo:gen"]
 description = "examples/todo, step 2: structpages-gen, its Go code (.x.go included) -> structpages.generated.go (committed)."
 depends = ["example:todo:gsx"]
-run = "{{vars.gen}} -C {{config_root}}/examples/todo -test ./..."
+run = "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}}/examples/todo -test ./..."
 
 [tasks."example:todo:record"]
 description = """examples/todo, step 3: e2e, its answers built the reflect way -> testdata/e2e.generated.txt (committed: \
@@ -142,34 +142,34 @@ depends = ["example:todo:record"]
 description = "examples/todo, step 4: build and test it three ways (reflect, generated, tinygo), a line each."
 depends = ["example:todo:generate"]
 quiet = true
-run = "{{vars.dev}} test examples/todo"
+run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} test examples/todo"
 
 [tasks."example:todo:bench"]
 description = "examples/todo, step 4: its benchmarks three ways, in-process and as served, into examples/todo/BENCH_GENERATED.md."
 depends = ["example:todo:generate"]
 quiet = true
-run = "{{vars.dev}} bench examples/todo"
+run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} bench examples/todo"
 
 [tasks."example:todo:serve:reflect"]
 description = "examples/todo, step 4: serve it on :8080 until Ctrl-C, reflect."
 depends = ["example:todo:generate"]
 raw = true
 quiet = true
-run = "{{vars.dev}} serve examples/todo reflect"
+run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} serve examples/todo reflect"
 
 [tasks."example:todo:serve:generated"]
 description = "examples/todo, step 4: serve it on :8080 until Ctrl-C, generated."
 depends = ["example:todo:generate"]
 raw = true
 quiet = true
-run = "{{vars.dev}} serve examples/todo generated"
+run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} serve examples/todo generated"
 
 [tasks."example:todo:serve:tinygo"]
 description = "examples/todo, step 4: serve it on :8080 until Ctrl-C, tinygo: WebAssembly in workerd."
 depends = ["example:todo:generate"]
 raw = true
 quiet = true
-run = "{{vars.dev}} serve examples/todo tinygo"
+run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} serve examples/todo tinygo"
 
 # ---- Tests, three ways: the library and each example, the same way -------------------------------------------------
 #

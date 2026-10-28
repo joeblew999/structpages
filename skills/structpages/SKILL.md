@@ -515,7 +515,7 @@ go tool structpages-gen -tags tinygo ./... # when some files build only under Ti
 - Function literals can't be named by generated code: pass `ID` and `RenderTarget.Is` declared methods or
   functions.
 - Routing needs nothing: in the generated builds `Mount` routes through its own copy of Go's `ServeMux` (TinyGo's
-  lacks Go 1.22 patterns), handing your mux only the mount's prefix. See docs/tinygo.md.
+  lacks Go 1.22 patterns), handing your mux only the mount's prefix. See docs/generated.md, and docs/tinygo.md for Workers.
 ## Key rules
 
 1. Read path params with `r.PathValue("itemId")`.

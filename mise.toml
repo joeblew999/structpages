@@ -50,6 +50,9 @@ arg "[way]" help="reflect, generated or tinygo: all three when left out"
 '''
 run = '''
 d=$usage_dir; name=$([ "$d" = . ] && echo library || basename "$d"); fail=0; row=""; report=""
+# What this run generates goes when it ends, as it fails or not (mise run gen:examples keeps it, to look at).
+cleanup() { find "$d" \( -path "$d/examples" -o -path "$d/tools" \) -prune -o -name 'structpages*.generated*.go' -print0 | xargs -0 rm -f; }
+trap cleanup EXIT
 if [ "$d" != . ] && [ -z "$(find "$d" -name '*_test.go' -print -quit)" ]; then printf '%-16s no tests\n' "$name"; exit 0; fi
 gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
 if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
@@ -323,6 +326,12 @@ usage = '''arg "<dir>" help=". for the library, or examples/<name>"'''
 run = '''
 set -euo pipefail
 d=$usage_dir; name=$([ "$d" = . ] && echo library || basename "$d")
+# What this run generates goes when it ends, as it fails or not: the code, and the WebAssembly served in workerd.
+cleanup() {
+  find "$d" \( -path "$d/examples" -o -path "$d/tools" \) -prune -o -name 'structpages*.generated*.go' -print0 | xargs -0 rm -f
+  rm -rf "$d/worker.generated"
+}
+trap cleanup EXIT
 if ! grep -qs '^func Benchmark' "$d"/*_test.go; then
   echo "$d has no benchmarks yet: add a BenchmarkCheck to its check_test.go, like examples/todo's" >&2; exit 2
 fi

@@ -152,7 +152,7 @@ In order:
    support and the TinyGo docs. That is a conversation to have with the maintainer before sending anything; nothing
    has gone upstream.
 5. **Accept the documented limits.** Generic page types and function literals stay unsupported in generated builds;
-   the generator warns about them and `docs/tinygo.md` says so.
+   the generator warns about them and `docs/generated.md` says so.
 6. **Speed up generated code only if a profile asks for it.** The generator knows every page type, so it could write
    direct calls and cache each method's entry instead of looking it up per call. On TinyGo the cost is TinyGo itself.
 7. **Delete the generated-code support when TinyGo catches up.** Once TinyGo's `reflect` can list and call methods

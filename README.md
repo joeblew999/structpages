@@ -110,6 +110,7 @@ The full docs live at <https://jackielii.github.io/structpages/>. Good starting 
 - [URLFor & ID](https://jackielii.github.io/structpages/urlfor): type-safe URLs and element ids
 - [Dependency Injection](https://jackielii.github.io/structpages/dependency-injection), [Error Handling](https://jackielii.github.io/structpages/error-handling), [Middleware](https://jackielii.github.io/structpages/middleware)
 - [Testing](https://jackielii.github.io/structpages/testing) and [Lint](https://jackielii.github.io/structpages/lint)
+- [Generated code](./docs/generated.md): running without method reflection, on the standard toolchain or under TinyGo
 - [TinyGo](https://jackielii.github.io/structpages/tinygo): building for WebAssembly hosts such as Cloudflare Workers
 - [API Guide](https://jackielii.github.io/structpages/api)
 
@@ -170,7 +171,8 @@ reads the generated code). The same tests and benchmarks run all three ways, and
 on standard Go, a problem in the generated code can be told apart from a TinyGo one. The goal is parity, and the
 library's tests now pass all three ways with nothing skipped: under TinyGo `Mount` routes through its own copy of Go's
 `ServeMux`, since TinyGo's can't route Go 1.22 patterns. What generated code can't describe is a function literal
-passed to `ID`. [docs/tinygo.md](./docs/tinygo.md) says how to use it, and what to remove once TinyGo catches up.
+passed to `ID`. [docs/generated.md](./docs/generated.md) says how to use it, and [docs/tinygo.md](./docs/tinygo.md) how to
+build for TinyGo and Workers, and what to remove once TinyGo catches up.
 
 **Running it.** Install [mise](https://mise.jdx.dev), which brings the Go, TinyGo and tool versions in `mise.toml`;
 `mise tasks` lists everything.

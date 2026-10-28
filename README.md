@@ -183,7 +183,8 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 | `mise run ci:go` | everything CI checks on standard Go |
 | `mise run example:simple` (`blog`, `htmx`, `todo`, ...) | one example app, served on http://localhost:8080 with reflect |
 | `mise run example:simple:tables` (and the rest) | the same app from its generated tables, no method reflection |
-| `mise run test:examples` / `test:examples:tables` | every example's tests, with reflect / from generated tables |
+| `mise run test:examples` / `test:examples:tables` / `test:examples:tinygo` | every example's tests three ways: Go with reflect, Go generated, TinyGo |
+| `mise run build:examples:tinygo` | every example built with TinyGo, natively and as WebAssembly, with sizes |
 | `mise run gen:examples` / `lint:examples` | structpages-gen (`tools/gen`) or structpages-lint (`tools/lint`) over every example |
 | `mise run clean:generated` | delete every generated table (`structpages_tables*.generated*.go`) |
 

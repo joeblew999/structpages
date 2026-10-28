@@ -4,6 +4,7 @@
 [tools]
 go = "1.26"
 tinygo = "0.43.0"
+"aqua:WebAssembly/binaryen" = "133" # wasm-opt, which TinyGo's WebAssembly builds need
 golangci-lint = "2"
 "go:golang.org/x/perf/cmd/benchstat" = "latest"
 
@@ -137,6 +138,51 @@ for d in examples/*/; do
   fi
   go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test ./... || fail=1
   (cd "$d" && go build -tags structpages_tables -o /dev/null ./... && go test -tags structpages_tables ./...) || fail=1
+done
+exit $fail
+'''
+
+[tasks."test:examples:tinygo"]
+description = """For each example but lint-misuse (a linter fixture: its test runs go build): regenerate gsx output, \
+generate its tables for TinyGo (its tests' too), then run its tests under TinyGo. Compare with test:examples."""
+shell = "bash -c"
+run = '''
+fail=0
+for d in examples/*/; do
+  case "$d" in */lint-misuse/) continue ;; esac
+  echo "== $d"
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
+    (cd "$d" && go tool gsx generate -q .) || fail=1
+  fi
+  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test -tags tinygo ./... 2> >(grep -v 'structpages-gen: warning' >&2) || fail=1
+  (cd "$d" && tinygo test ./...) || fail=1
+done
+exit $fail
+'''
+
+[tasks."build:examples:tinygo"]
+description = """Build every example with TinyGo, natively and as WebAssembly (-target wasm), after generating its \
+tables for TinyGo, and print each binary's size. Nothing is written to the tree."""
+shell = "bash -c"
+run = '''
+fail=0
+size() { awk 'END { printf "%d KB", $5 / 1024 }'; } # the flash column of tinygo -size short
+printf '%-20s %10s %10s\n' example native wasm
+for d in examples/*/; do
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
+    (cd "$d" && go tool gsx generate -q .) || fail=1
+  fi
+  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -tags tinygo ./... 2> >(grep -v 'structpages-gen: warning' >&2) || fail=1
+  sizes=()
+  for target in native wasm; do
+    flags=(); [ $target = wasm ] && flags=(-target wasm)
+    if out=$(cd "$d" && tinygo build "${flags[@]}" -size short -o /dev/null . 2>&1); then
+      sizes+=("$(size <<<"$out")")
+    else
+      sizes+=(FAILED); fail=1; echo "$out" | tail -3 >&2
+    fi
+  done
+  printf '%-20s %10s %10s\n' "$(basename "$d")" "${sizes[@]}"
 done
 exit $fail
 '''

@@ -128,9 +128,10 @@ In order:
    whether it works. In parallel, follow [tinygo-org/net#56](https://github.com/tinygo-org/net/pull/56), which fixes
    method patterns but not escaped slashes.
 
-   **Status: done for `todo`.** `servemux/` is Go 1.26's `ServeMux` as Go wrote it, with Go's tests, its own module;
-   they pass with Go and under TinyGo (`mise run test:servemux`). `todo` mounts on it in TinyGo builds
-   (`mux_tinygo.go`) and on `net/http`'s elsewhere (`mux.go`); structpages itself is unchanged. `todo`'s check now
+   **Status: done for `todo`.** `workers/servemux` is Go 1.26's `ServeMux` as Go wrote it, with Go's tests; they pass
+   with Go and under TinyGo (`mise run test:workers`). `workers.NewMux` returns it in TinyGo builds and `net/http`'s
+   elsewhere, and `workers.Serve` serves on `net/http` or, in a Worker, through workerd; `todo` calls both, and
+   `tools/workers` writes the Worker's JavaScript glue. structpages itself is unchanged. `todo`'s check now
    passes all three ways, and served in workerd its toggle and delete work. The other examples follow when they get
    `todo`'s shape.
 3. **Run the TinyGo way where it will really run.** Serve each example's handler from `workerd`, locally, through

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/jackielii/structpages"
+	"github.com/jackielii/structpages/workers"
 )
 
 type Todo struct {
@@ -60,16 +61,16 @@ func removeTodo(id int) {
 	delete(todoStore, id)
 }
 
-// handler builds the app: the pages mounted on their own mux (mux.go, or
-// mux_tinygo.go under TinyGo), with some sample todos. main serves it
-// (serve.go, or serve_js.go in a Worker); check_test.go calls it directly.
+// handler builds the app: the pages mounted on their own mux, with some
+// sample todos. main serves it; check_test.go calls it directly. workers
+// makes the same code run under TinyGo, as a Worker.
 func handler() http.Handler {
 	// Add some sample todos
 	addTodo("Learn Go")
 	addTodo("Build a TODO app")
 	addTodo("Deploy to production")
 
-	mux := newMux()
+	mux := workers.NewMux()
 	sp, err := structpages.Mount(mux, index{}, "/", "index",
 		// htmx 2.x: route HX-Target to the page's partials.
 		structpages.WithTargetSelector(structpages.HTMXRenderTarget),
@@ -82,7 +83,10 @@ func handler() http.Handler {
 	return mux
 }
 
-func main() { serve(handler()) }
+func main() {
+	log.Println("Starting TODO app on :8080")
+	log.Fatal(workers.Serve(":8080", handler()))
+}
 
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("Error: %v", err)

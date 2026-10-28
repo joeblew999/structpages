@@ -81,7 +81,7 @@ func TestID_boundMethodValueCrossPackage(t *testing.T) {
 // A request for a page's own component Is that component's bound value,
 // and not the bound value of a same-named type from another package.
 func TestMethodRenderTarget_boundMethodValueCrossPackage(t *testing.T) {
-	m, ok := reflect.TypeFor[idconflicta.Widget]().MethodByName("List")
+	m, ok := methodByName(reflect.TypeFor[idconflicta.Widget](), "List")
 	if !ok {
 		t.Fatal("idconflicta.Widget.List not found")
 	}

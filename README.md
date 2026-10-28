@@ -176,21 +176,16 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 
 | Task | Runs |
 |---|---|
-| `mise run parity` | the suite on Go and TinyGo, listing what passes on Go but not on TinyGo |
-| `mise run test` / `test:generated` / `test:tinygo` | the test suite three ways: Go with reflect, Go generated, TinyGo |
-| `mise run bench` / `bench:generated` / `bench:tinygo` | the benchmarks the same three ways |
-| `mise run bench:compare` | all three benchmark runs, compared with benchstat into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md) |
-| `mise run ci:go` | everything CI checks on standard Go |
-| `mise run example:simple` (`blog`, `htmx`, `todo`, ...) | one example app, served on http://localhost:8080 with reflect |
-| `mise run example:simple:generated` (and the rest) | the same app from its generated code, no method reflection |
-| `mise run test:examples` / `test:examples:generated` / `test:examples:tinygo` | every example's tests three ways: Go with reflect, Go generated, TinyGo |
-| `mise run build:examples:tinygo` | every example built with TinyGo, natively and as WebAssembly, with sizes |
-| `mise run check:examples` | every example with a check (`check_test.go`) crawled three ways and compared with its recording, as a grid |
-| `mise run check:examples:update` | re-record those checks from the reflection build |
+| `mise run test` / `test:generated` / `test:tinygo` | the library's tests three ways: reflect, generated, tinygo |
+| `mise run parity` | what passes on reflect but not on tinygo, in the library |
+| `mise run examples` | every example's tests three ways, as a grid (`examples:record` re-records their checks) |
+| `mise run example:todo` / `example:todo:generated` / `example:todo:tinygo` | serve an example on http://localhost:8080 each way (tinygo: WebAssembly in workerd; `todo` so far) |
+| `mise run bench:compare` / `bench:examples` | benchmarks three ways, into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md) / [BENCH-EXAMPLES.GENERATED.md](./BENCH-EXAMPLES.GENERATED.md) |
 | `mise run gen:examples` / `lint:examples` | structpages-gen (`tools/gen`) or structpages-lint (`tools/lint`) over every example |
-| `mise run clean:generated` | delete every generated table (`structpages_tables*.generated*.go`) |
+| `mise run clean:generated` | delete everything generated |
+| `mise run ci:go` | everything CI checks on standard Go |
 
-On standard Go the tables come out about even with `reflect` overall: faster for `ID`, slower for `Mount` and `URLFor`
-(see the comparison). They are there for TinyGo, not for speed.
+On standard Go, generated code comes out about even with `reflect` in the library's micro-benchmarks (faster for `ID`,
+slower for `Mount` and `URLFor`), and 23% faster serving `todo`'s page, with a fifth fewer allocations.
 
 Where this stands and what comes next: [TINYGO-STRATEGY.md](./TINYGO-STRATEGY.md).

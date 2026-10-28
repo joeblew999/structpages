@@ -7,6 +7,8 @@ require (
 	github.com/jackielii/structpages v0.0.0
 )
 
+require github.com/syumai/workers-go v0.36.0
+
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/editorconfig/editorconfig-core-go/v2 v2.6.4 // indirect

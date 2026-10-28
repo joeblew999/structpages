@@ -61,7 +61,8 @@ func removeTodo(id int) {
 }
 
 // handler builds the app: the pages mounted on their own mux, with some
-// sample todos. main serves it; check_test.go calls it directly.
+// sample todos. main serves it (serve.go, or serve_js.go in a Worker);
+// check_test.go calls it directly.
 func handler() http.Handler {
 	// Add some sample todos
 	addTodo("Learn Go")
@@ -81,11 +82,7 @@ func handler() http.Handler {
 	return mux
 }
 
-func main() {
-	h := handler()
-	log.Println("Starting TODO app on :8080")
-	http.ListenAndServe(":8080", h)
-}
+func main() { serve(handler()) }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	log.Printf("Error: %v", err)

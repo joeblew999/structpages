@@ -1,24 +1,40 @@
-# Local dev setup for this fork's tinygo branch (upstream has no mise file).
-# Versions follow .github/workflows/ci.yml's TinyGo job.
+# Local dev setup for this fork's tinygo branch (upstream has no mise file); versions follow
+# .github/workflows/ci.yml. `mise tasks` lists everything.
+#
+# structpages runs three ways, and most tasks come in threes:
+#   reflect    standard Go; structpages reads the app's methods through reflect (the default)
+#   generated  standard Go, -tags structpages_tables: it reads code structpages-gen generates instead
+#   tinygo     TinyGo, which always reads the generated code
+# Everything generated is named *.generated* and gitignored (mise run clean:generated deletes it).
 
 [tools]
 go = "1.26"
 tinygo = "0.43.0"
-"aqua:WebAssembly/binaryen" = "133" # wasm-opt, which TinyGo's WebAssembly builds need
+"aqua:WebAssembly/binaryen" = "133" # wasm-opt, for TinyGo's WebAssembly builds
+workerd = "1.20261019.1"            # Cloudflare's Workers runtime, to serve TinyGo builds locally
 golangci-lint = "2"
 "go:golang.org/x/perf/cmd/benchstat" = "latest"
 
-[tasks."ci:go"]
-description = "Everything CI checks on the standard Go toolchain."
-depends = ["test", "fmt", "vet", "lint", "test:examples"]
+# ---- The library: its test suite three ways ---------------------------------------------------------------------
 
 [tasks.test]
-description = "Run the test suite on the standard Go toolchain (method reflection), with the race detector as CI does."
+description = "The library's tests, reflect, with the race detector (CI's Test job)."
 run = "go test -race ./..."
 
+[tasks."test:generated"]
+description = "The library's tests, generated: generate the code, then test reading it instead of reflect (CI's Tables build)."
+run = [
+  "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...",
+  "go test -tags structpages_tables ./...",
+]
+
+[tasks."test:tinygo"]
+description = "The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job)."
+run = "scripts/tinygo-test.sh"
+
 [tasks.parity]
-description = """Run the suite on standard Go and under TinyGo and list what passes on Go but not on TinyGo: \
-tests TinyGo skips (with why), fails, or never reports. Empty lists are parity."""
+description = """The library's tests on reflect and tinygo, listing what passes on reflect but not on tinygo: what \
+TinyGo skips (with why), fails, or never reports. Empty lists are parity."""
 shell = "bash -c"
 run = '''
 set -euo pipefail
@@ -50,26 +66,268 @@ done
 echo; echo "go: $(grep -c . <<<"$passed_go") passed; tinygo: $(on_tinygo PASS | grep -c .) passed, $(on_tinygo SKIP | grep -c .) skipped, $(on_tinygo FAIL | grep -c .) failed"
 '''
 
-[tasks.bench]
-description = "Run the benchmarks on the standard Go toolchain (PERFORMANCE.md)."
-run = "go test -run NoTest -bench . -benchmem ."
+# ---- The examples: tested three ways, and served three ways -----------------------------------------------------
+#
+# An example's check_test.go crawls its app (tools/check) and compares every response with
+# testdata/check.generated.txt, recorded from reflect. lint-misuse is a linter fixture: its tests check the linter.
 
-[tasks."bench:generated"]
-description = "Run the benchmarks on standard Go reading generated code instead: TinyGo's code path, on Go's compiler. Compare with bench."
+[tasks.examples]
+description = """Every example's tests three ways (reflect, generated, tinygo), as a grid, then the first difference of \
+each failure. "no tests" marks an example with none yet."""
+shell = "bash -c"
+run = '''
+fail=0; report=""
+gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
+printf '%-20s %-10s %-10s %-10s\n' example reflect generated tinygo
+for d in examples/*/; do
+  name=$(basename "$d")
+  [ "$name" = lint-misuse ] && continue
+  if [ -z "$(find "$d" -name '*_test.go' -print -quit)" ]; then printf '%-20s %s\n' "$name" "no tests"; continue; fi
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
+  row=()
+  for way in reflect generated tinygo; do
+    case $way in
+      reflect) cmd=(go test -count=1 ./...) ;;
+      generated) gen; cmd=(go test -count=1 -tags structpages_tables ./...) ;;
+      tinygo) gen -tags tinygo; cmd=(tinygo test ./...) ;;
+    esac
+    if out=$(cd "$d" && "${cmd[@]}" 2>&1); then
+      row+=(pass)
+    else
+      row+=(FAIL); fail=1
+      report+=$'\n'"== $name, $way:"$'\n'"$(grep -vE '^(FAIL|ok|\?)' <<<"$out" | head -14)"$'\n'
+    fi
+  done
+  printf '%-20s %-10s %-10s %-10s\n' "$name" "${row[@]}"
+done
+if [ -n "$report" ]; then echo "$report"; fi
+exit $fail
+'''
+
+[tasks."examples:record"]
+description = """Record every example's check (testdata/check.generated.txt) from reflect: the reference the other two \
+ways are compared with. Review the diff before committing it."""
+run = '''
+for d in examples/*/; do
+  [ -f "$d/check_test.go" ] || continue
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
+  (cd "$d" && CHECK_UPDATE=1 go test -count=1 -run TestCheck .) || exit 1
+done
+git status --short -- examples
+'''
+
+[tasks."test:examples"]
+description = "Every example rebuilt from fresh gsx output, built and tested, reflect (CI's Example jobs)."
+run = '''
+for d in examples/*/; do
+  echo "== $d"
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
+    (cd "$d" && go tool gsx generate -q -no-cache .) || exit 1
+  fi
+  (cd "$d" && go build -o /dev/null ./... && go test ./...) || exit 1
+done
+'''
+
+# Serving, on http://localhost:8080 until Ctrl-C: example:<name> (reflect), example:<name>:generated, and
+# example:<name>:tinygo, which builds it as WebAssembly into examples/<name>/worker.generated/ and runs it in
+# workerd. A TinyGo build can't listen on a socket, so tinygo needs the example's serve_js.go (todo has it).
+
+[tasks._example]
+description = "Serve examples/<name> on :8080, reflect, generated or tinygo."
+hide = true
+raw = true
+quiet = true
+usage = '''
+arg "<name>" help="the example's folder under examples/"
+arg "[way]" help="reflect, generated or tinygo" default="reflect"
+'''
+run = '''
+set -eu
+cd "examples/$usage_name"
+if grep -q 'gsxhq/gsx/cmd/gsx' go.mod; then go tool gsx generate -q .; fi
+gen() { go run -C "{{config_root}}/tools/gen" ./cmd/structpages-gen -C "$PWD" "$@" ./...; }
+listgen() { find . -name 'structpages_tables*.generated*.go' | sed 's|^\./|  |'; }
+case "$usage_way" in
+reflect)
+  echo "examples/$usage_name, reflect: http://localhost:8080. Ctrl-C stops it."
+  exec go run . ;;
+generated)
+  gen
+  echo "examples/$usage_name, generated: http://localhost:8080, reading this generated code instead of reflect:"
+  listgen; echo "Ctrl-C stops it."
+  exec go run -tags structpages_tables . ;;
+tinygo)
+  if [ ! -f serve_js.go ]; then
+    echo "examples/$usage_name can't run under TinyGo yet: it needs a serve_js.go like examples/todo's" >&2; exit 2
+  fi
+  gen -tags tinygo
+  out=worker.generated; rm -rf "$out"; mkdir -p "$out"
+  go run "github.com/syumai/workers-go/cmd/workers-assets-gen@$(go list -m github.com/syumai/workers-go | cut -d' ' -f2)" -mode tinygo -o "$out"
+  tinygo build -o "$out/app.wasm" -target wasm -no-debug .
+  cat > "$out/config.capnp" <<'EOF'
+# Generated by mise run example:<name>:tinygo. Do not edit.
+using Workerd = import "/workerd/workerd.capnp";
+
+const config :Workerd.Config = (
+  services = [(name = "app", worker = .app)],
+  sockets = [(name = "http", address = "*:8080", http = (), service = "app")],
+);
+
+const app :Workerd.Worker = (
+  modules = [
+    (name = "worker.mjs", esModule = embed "worker.mjs"),
+    (name = "runtime.mjs", esModule = embed "runtime.mjs"),
+    (name = "wasm_exec.js", esModule = embed "wasm_exec.js"),
+    (name = "app.wasm", wasm = embed "app.wasm"),
+  ],
+  compatibilityDate = "2026-10-01",
+);
+EOF
+  echo "examples/$usage_name, tinygo: http://localhost:8080, $(du -k "$out/app.wasm" | cut -f1) KB of WebAssembly in workerd,"
+  echo "reading this generated code:"; listgen; echo "Ctrl-C stops it."
+  exec workerd serve "$out/config.capnp" ;;
+*) echo "the way is reflect, generated or tinygo, not $usage_way" >&2; exit 2 ;;
+esac
+'''
+
+[tasks."example:blog"]
+description = "Serve examples/blog on :8080, reflect."
+raw = true
+quiet = true
+run = "mise run _example blog"
+
+[tasks."example:blog:generated"]
+description = "Serve examples/blog on :8080, generated."
+raw = true
+quiet = true
+run = "mise run _example blog generated"
+
+[tasks."example:html-template"]
+description = "Serve examples/html-template on :8080, reflect."
+raw = true
+quiet = true
+run = "mise run _example html-template"
+
+[tasks."example:html-template:generated"]
+description = "Serve examples/html-template on :8080, generated."
+raw = true
+quiet = true
+run = "mise run _example html-template generated"
+
+[tasks."example:htmx"]
+description = "Serve examples/htmx on :8080, reflect."
+raw = true
+quiet = true
+run = "mise run _example htmx"
+
+[tasks."example:htmx:generated"]
+description = "Serve examples/htmx on :8080, generated."
+raw = true
+quiet = true
+run = "mise run _example htmx generated"
+
+[tasks."example:htmx-render-target"]
+description = "Serve examples/htmx-render-target on :8080, reflect."
+raw = true
+quiet = true
+run = "mise run _example htmx-render-target"
+
+[tasks."example:htmx-render-target:generated"]
+description = "Serve examples/htmx-render-target on :8080, generated."
+raw = true
+quiet = true
+run = "mise run _example htmx-render-target generated"
+
+[tasks."example:simple"]
+description = "Serve examples/simple on :8080, reflect."
+raw = true
+quiet = true
+run = "mise run _example simple"
+
+[tasks."example:simple:generated"]
+description = "Serve examples/simple on :8080, generated."
+raw = true
+quiet = true
+run = "mise run _example simple generated"
+
+[tasks."example:todo"]
+description = "Serve examples/todo on :8080, reflect."
+raw = true
+quiet = true
+run = "mise run _example todo"
+
+[tasks."example:todo:generated"]
+description = "Serve examples/todo on :8080, generated."
+raw = true
+quiet = true
+run = "mise run _example todo generated"
+
+[tasks."example:todo:tinygo"]
+description = "Serve examples/todo on :8080, tinygo: WebAssembly in workerd."
+raw = true
+quiet = true
+run = "mise run _example todo tinygo"
+
+[tasks."example:url-validation"]
+description = "Serve examples/url-validation on :8080, reflect."
+raw = true
+quiet = true
+run = "mise run _example url-validation"
+
+[tasks."example:url-validation:generated"]
+description = "Serve examples/url-validation on :8080, generated."
+raw = true
+quiet = true
+run = "mise run _example url-validation generated"
+
+# ---- The repo's two tools, over every example -------------------------------------------------------------------
+
+[tasks."gen:examples"]
+description = """structpages-gen (tools/gen) over every example: regenerates gsx output, then writes \
+structpages_tables.generated.go into each package with pages, and lists what it wrote."""
+run = '''
+fail=0
+for d in examples/*/; do
+  echo "== $d"
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
+    (cd "$d" && go tool gsx generate -q .) || fail=1
+  fi
+  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" ./... || fail=1
+  find "$d" -name 'structpages_tables*.generated*.go' | sed 's/^/   generated: /'
+done
+exit $fail
+'''
+
+[tasks."lint:examples"]
+description = "structpages-lint (tools/lint) over every example but lint-misuse, whose misuses are deliberate."
+dir = "tools/lint"
+run = '''
+fail=0
+for d in ../../examples/*/; do
+  case "$d" in */lint-misuse/) continue ;; esac
+  echo "== $d"
+  # The linter loads packages from its working directory, so -exec starts it in the example's.
+  go run -exec "sh -c 'cd $d && exec \"\$@\"' sh" ./cmd/structpages-lint ./... || fail=1
+done
+exit $fail
+'''
+
+[tasks."clean:generated"]
+description = "Delete everything generated: the structpages_tables*.generated*.go files and the examples' worker.generated/."
 run = [
-  "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...",
-  "go test -tags structpages_tables -run NoTest -bench . -benchmem .",
+  "find . -name 'structpages_tables*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'",
+  "find examples -type d -name worker.generated -prune -print -exec rm -rf {} + | sed 's/^/deleted /'",
 ]
 
-[tasks."bench:tinygo"]
-description = "Run the benchmarks under TinyGo, via scripts/tinygo-test.sh. Compare with bench."
-run = "scripts/tinygo-test.sh -run NoTest -bench . -benchmem"
+# ---- Benchmarks, three ways ---------------------------------------------------------------------------------------
+
+[tasks.bench]
+description = "The library's benchmarks, reflect (PERFORMANCE.md)."
+run = "go test -run NoTest -bench . -benchmem ."
 
 [tasks."bench:compare"]
-description = """Run bench, bench:generated and bench:tinygo one after another and compare them with benchstat: \
-reflect against generated code on Go, and against TinyGo. Prints the comparison and writes it to \
-BENCH-COMPARE.GENERATED.md. BENCH picks benchmarks (default all), COUNT the runs of each (default 6), \
-BENCHTIME each run's length (default 200ms)."""
+description = """The library's benchmarks three ways, compared with benchstat, into BENCH-COMPARE.GENERATED.md. \
+BENCH picks benchmarks (default all), COUNT the runs of each (default 6), BENCHTIME each run's length (default 200ms)."""
 shell = "bash -c"
 run = '''
 set -euo pipefail
@@ -85,11 +343,11 @@ echo "$result"
 cat > BENCH-COMPARE.GENERATED.md <<EOF
 <!-- Generated by \`mise run bench:compare\`. Do not edit: run it again. -->
 
-# Benchmark comparison
+# Benchmark comparison: the library
 
-- reflect: standard Go, structpages reading methods through reflect (\`mise run bench\`)
-- generated: standard Go, reading generated code instead (\`mise run bench:generated\`)
-- tinygo: TinyGo, which reads the generated code too (\`mise run bench:tinygo\`); it reports no allocs/op
+- reflect: standard Go, structpages reading methods through reflect
+- generated: standard Go, reading generated code instead (-tags structpages_tables)
+- tinygo: TinyGo, which reads the generated code too; it reports no allocs/op
 
 Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ).
 $(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$reflect" | sed -n 's/^cpu: //p').
@@ -102,302 +360,60 @@ EOF
 echo "wrote BENCH-COMPARE.GENERATED.md"
 '''
 
+[tasks."bench:examples"]
+description = """Every example's BenchmarkCheck (its recorded GETs) three ways, compared with benchstat, into \
+BENCH-EXAMPLES.GENERATED.md. COUNT the runs of each (default 6), BENCHTIME each run's length (default 200ms)."""
+shell = "bash -c"
+run = '''
+set -euo pipefail
+flags=(-run NoTest -bench BenchmarkCheck -benchmem -count "${COUNT:-6}" -benchtime "${BENCHTIME:-200ms}")
+gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
+sections=""
+for d in examples/*/; do
+  grep -qs 'func BenchmarkCheck' "$d/check_test.go" || continue
+  name=$(basename "$d")
+  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
+  echo "== $name: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
+  echo "== $name: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_tables "${flags[@]}" .)
+  echo "== $name: tinygo..."; gen -tags tinygo
+  tinygo=$(cd "$d" && tinygo test "${flags[@]}" . | sed -E 's/[[:space:]]+0 allocs\/op//')
+  result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$reflect") generated=<(echo "$generated") tinygo=<(echo "$tinygo"))
+  echo "$result"
+  sections+=$'\n'"## $name"$'\n\n```\n'"$result"$'\n```\n'
+done
+cat > BENCH-EXAMPLES.GENERATED.md <<EOF
+<!-- Generated by \`mise run bench:examples\`. Do not edit: run it again. -->
+
+# Benchmark comparison: the examples
+
+Each example's BenchmarkCheck times the GETs its check recorded (tools/check), three ways: reflect,
+generated (-tags structpages_tables) and tinygo (which reports no allocs/op).
+
+Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ).
+$(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4). COUNT=${COUNT:-6} BENCHTIME=${BENCHTIME:-200ms}.
+$sections
+EOF
+echo "wrote BENCH-EXAMPLES.GENERATED.md"
+'''
+
+# ---- What upstream's CI checks, on standard Go --------------------------------------------------------------------
+
+[tasks."ci:go"]
+description = "Everything CI checks on standard Go: test, fmt, vet, lint, test:examples."
+depends = ["test", "fmt", "vet", "lint", "test:examples"]
+
 [tasks.fmt]
 description = "Fail if any file needs gofmt (CI's Format job)."
 run = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
 
 [tasks.vet]
-description = "Run go vet on the library, and on tools/gen and tools/check, their own modules (CI's Format job)."
+description = "go vet on the library, tools/gen and tools/check (CI's Format job)."
 run = ["go vet ./...", "go vet -C tools/gen ./...", "go vet -C tools/check ./..."]
 
 [tasks.lint]
-description = "Run golangci-lint with .golangci.yml on the library, tools/gen and tools/check (CI's Lint job)."
+description = "golangci-lint on the library, tools/gen and tools/check (CI's Lint job)."
 run = [
   "golangci-lint run --timeout=5m",
   "cd tools/gen && golangci-lint run --timeout=5m",
   "cd tools/check && golangci-lint run --timeout=5m",
 ]
-
-[tasks."check:examples"]
-description = """Run every example's check (TestCheck: a crawl of the app, compared with the reflection build's \
-recording) three ways: Go with reflect, Go generated, TinyGo. Prints a grid, then the first difference of each \
-failure."""
-shell = "bash -c"
-run = '''
-fail=0; report=""
-gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
-printf '%-20s %-10s %-10s %-10s\n' example reflect generated tinygo
-for d in examples/*/; do
-  [ -f "$d/check_test.go" ] || continue
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
-  row=()
-  for way in reflect generated tinygo; do
-    case $way in
-      reflect) cmd=(go test -count=1 -run TestCheck .) ;;
-      generated) gen; cmd=(go test -count=1 -tags structpages_tables -run TestCheck .) ;;
-      tinygo) gen -tags tinygo; cmd=(tinygo test -run TestCheck .) ;;
-    esac
-    if out=$(cd "$d" && "${cmd[@]}" 2>&1); then
-      row+=(pass)
-    else
-      row+=(FAIL); fail=1
-      report+=$'\n'"== $d, $way:"$'\n'"$(grep -vE '^(FAIL|ok)' <<<"$out" | head -14)"$'\n'
-    fi
-  done
-  printf '%-20s %-10s %-10s %-10s\n' "$(basename "$d")" "${row[@]}"
-done
-if [ -n "$report" ]; then echo "$report"; fi
-exit $fail
-'''
-
-[tasks."check:examples:update"]
-description = """Record every example's check (testdata/check.generated.txt) from the reflection build, the reference \
-the other two ways are compared with. Review the diff before committing it."""
-run = '''
-for d in examples/*/; do
-  [ -f "$d/check_test.go" ] || continue
-  (cd "$d" && CHECK_UPDATE=1 go test -count=1 -run TestCheck .) || exit 1
-done
-git status --short -- examples
-'''
-
-[tasks."test:examples"]
-description = "For each example: regenerate its gsx output, then build and test it (CI's Example jobs)."
-run = '''
-for d in examples/*/; do
-  echo "== $d"
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
-    (cd "$d" && go tool gsx generate -q -no-cache .) || exit 1
-  fi
-  (cd "$d" && go build -o /dev/null ./... && go test ./...) || exit 1
-done
-'''
-
-[tasks."test:examples:generated"]
-description = """For each example: regenerate gsx output, generate its code (its tests' too), then build and test \
-it without method reflection (-tags structpages_tables). Compare with test:examples."""
-run = '''
-fail=0
-for d in examples/*/; do
-  echo "== $d"
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
-    (cd "$d" && go tool gsx generate -q .) || fail=1
-  fi
-  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test ./... || fail=1
-  (cd "$d" && go build -tags structpages_tables -o /dev/null ./... && go test -tags structpages_tables ./...) || fail=1
-done
-exit $fail
-'''
-
-[tasks."test:examples:tinygo"]
-description = """For each example but lint-misuse (a linter fixture: its test runs go build): regenerate gsx output, \
-generate its code for TinyGo (its tests' too), then run its tests under TinyGo. Compare with test:examples."""
-shell = "bash -c"
-run = '''
-fail=0
-for d in examples/*/; do
-  case "$d" in */lint-misuse/) continue ;; esac
-  echo "== $d"
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
-    (cd "$d" && go tool gsx generate -q .) || fail=1
-  fi
-  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test -tags tinygo ./... 2> >(grep -v 'structpages-gen: warning' >&2) || fail=1
-  (cd "$d" && tinygo test ./...) || fail=1
-done
-exit $fail
-'''
-
-[tasks."build:examples:tinygo"]
-description = """Build every example with TinyGo, natively and as WebAssembly (-target wasm), after generating its \
-code for TinyGo, and print each binary's size. Nothing is written to the tree."""
-shell = "bash -c"
-run = '''
-fail=0
-size() { awk 'END { printf "%d KB", $5 / 1024 }'; } # the flash column of tinygo -size short
-printf '%-20s %10s %10s\n' example native wasm
-for d in examples/*/; do
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
-    (cd "$d" && go tool gsx generate -q .) || fail=1
-  fi
-  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -tags tinygo ./... 2> >(grep -v 'structpages-gen: warning' >&2) || fail=1
-  sizes=()
-  for target in native wasm; do
-    flags=(); [ $target = wasm ] && flags=(-target wasm)
-    if out=$(cd "$d" && tinygo build "${flags[@]}" -size short -o /dev/null . 2>&1); then
-      sizes+=("$(size <<<"$out")")
-    else
-      sizes+=(FAILED); fail=1; echo "$out" | tail -3 >&2
-    fi
-  done
-  printf '%-20s %10s %10s\n' "$(basename "$d")" "${sizes[@]}"
-done
-exit $fail
-'''
-
-[tasks."clean:generated"]
-description = "Delete every table structpages-gen wrote (structpages_tables*.generated*.go), in the library and the examples."
-run = "find . -name 'structpages_tables*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'"
-
-# Each example app two ways, served on http://localhost:8080 until Ctrl-C:
-#   example:<name>            the normal build: structpages reads the app's methods through reflect
-#   example:<name>:generated  structpages-gen generates code for the app first, and it reads that instead
-#                             (-tags structpages_tables: TinyGo's code path, on standard Go)
-# The generated files only build with that tag, so both work whether they exist or not.
-# lint-misuse is a linter fixture and never serves.
-
-[tasks._example]
-description = "Serve examples/<name> on :8080: with reflect, or (mode generated) from generated code."
-hide = true
-raw = true
-quiet = true
-usage = '''
-arg "<name>" help="the example's folder under examples/"
-arg "[mode]" help="reflect or generated" default="reflect"
-'''
-run = '''
-set -eu
-cd "examples/$usage_name"
-if grep -q 'gsxhq/gsx/cmd/gsx' go.mod; then go tool gsx generate -q .; fi
-case "$usage_mode" in
-reflect)
-  echo "examples/$usage_name: http://localhost:8080, the normal build (methods read through reflect). Ctrl-C stops it."
-  exec go run . ;;
-generated)
-  go run -C "{{config_root}}/tools/gen" ./cmd/structpages-gen -C "$PWD" ./...
-  echo "examples/$usage_name: http://localhost:8080, reading this generated code instead of reflect:"
-  find . -name 'structpages_tables*.generated*.go' | sed 's|^\./|  |'
-  echo "Ctrl-C stops it."
-  exec go run -tags structpages_tables . ;;
-*) echo "mode is reflect or generated, not $usage_mode" >&2; exit 2 ;;
-esac
-'''
-
-[tasks."example:blog"]
-description = "Serve examples/blog on :8080, the normal build (reflect)."
-raw = true
-quiet = true
-run = "mise run _example blog"
-
-[tasks."example:blog:generated"]
-description = "Serve examples/blog on :8080 from generated code (no method reflection)."
-raw = true
-quiet = true
-run = "mise run _example blog generated"
-
-[tasks."example:html-template"]
-description = "Serve examples/html-template on :8080, the normal build (reflect)."
-raw = true
-quiet = true
-run = "mise run _example html-template"
-
-[tasks."example:html-template:generated"]
-description = "Serve examples/html-template on :8080 from generated code (no method reflection)."
-raw = true
-quiet = true
-run = "mise run _example html-template generated"
-
-[tasks."example:htmx"]
-description = "Serve examples/htmx on :8080, the normal build (reflect)."
-raw = true
-quiet = true
-run = "mise run _example htmx"
-
-[tasks."example:htmx:generated"]
-description = "Serve examples/htmx on :8080 from generated code (no method reflection)."
-raw = true
-quiet = true
-run = "mise run _example htmx generated"
-
-[tasks."example:htmx-render-target"]
-description = "Serve examples/htmx-render-target on :8080, the normal build (reflect)."
-raw = true
-quiet = true
-run = "mise run _example htmx-render-target"
-
-[tasks."example:htmx-render-target:generated"]
-description = "Serve examples/htmx-render-target on :8080 from generated code (no method reflection)."
-raw = true
-quiet = true
-run = "mise run _example htmx-render-target generated"
-
-[tasks."example:simple"]
-description = "Serve examples/simple on :8080, the normal build (reflect)."
-raw = true
-quiet = true
-run = "mise run _example simple"
-
-[tasks."example:simple:generated"]
-description = "Serve examples/simple on :8080 from generated code (no method reflection)."
-raw = true
-quiet = true
-run = "mise run _example simple generated"
-
-[tasks."example:todo"]
-description = "Serve examples/todo on :8080, the normal build (reflect)."
-raw = true
-quiet = true
-run = "mise run _example todo"
-
-[tasks."example:todo:generated"]
-description = "Serve examples/todo on :8080 from generated code (no method reflection)."
-raw = true
-quiet = true
-run = "mise run _example todo generated"
-
-[tasks."example:url-validation"]
-description = "Serve examples/url-validation on :8080, the normal build (reflect)."
-raw = true
-quiet = true
-run = "mise run _example url-validation"
-
-[tasks."example:url-validation:generated"]
-description = "Serve examples/url-validation on :8080 from generated code (no method reflection)."
-raw = true
-quiet = true
-run = "mise run _example url-validation generated"
-
-[tasks."lint:examples"]
-description = "Run structpages-lint, built from tools/lint, over every example but lint-misuse (its misuses are deliberate; its own test checks them)."
-dir = "tools/lint"
-run = '''
-fail=0
-for d in ../../examples/*/; do
-  case "$d" in */lint-misuse/) continue ;; esac
-  echo "== $d"
-  # The linter loads packages from its working directory, so -exec starts it in the example's.
-  go run -exec "sh -c 'cd $d && exec \"\$@\"' sh" ./cmd/structpages-lint ./... || fail=1
-done
-exit $fail
-'''
-
-[tasks."gen:examples"]
-description = """Run structpages-gen, built from tools/gen, over every example: regenerates gsx output, then writes \
-structpages_tables.generated.go into each package with pages (gitignored), and lists what it wrote."""
-run = '''
-fail=0
-for d in examples/*/; do
-  echo "== $d"
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
-    (cd "$d" && go tool gsx generate -q .) || fail=1
-  fi
-  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" ./... || fail=1
-  find "$d" -name 'structpages_tables*.generated*.go' | sed 's/^/   generated: /'
-done
-exit $fail
-'''
-
-[tasks."test:structpages-lint"]
-description = "Test the structpages-lint analyzer module in tools/lint (not in CI; TestRegion_Integration fails on main too)."
-dir = "tools/lint"
-run = "go test ./..."
-
-[tasks."test:generated"]
-description = "Generate the method code, then run the suite on standard Go reading it instead of reflect (CI's Tables build)."
-run = [
-  "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...",
-  "go test -tags structpages_tables ./...",
-]
-
-[tasks."test:tinygo"]
-description = "Run the suite as TinyGo builds it, via scripts/tinygo-test.sh (CI's TinyGo job)."
-run = "scripts/tinygo-test.sh"

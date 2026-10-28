@@ -40,7 +40,8 @@ func build(dir string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
-	if err := run("go", "run", "github.com/syumai/workers-go/cmd/workers-assets-gen", "-mode", "tinygo", "-o", dir); err != nil {
+	const assetsGen = "github.com/syumai/workers-go/cmd/workers-assets-gen"
+	if err := run("go", "run", assetsGen, "-mode", "tinygo", "-o", dir); err != nil {
 		return err
 	}
 	if err := write(dir); err != nil {

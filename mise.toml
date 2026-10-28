@@ -33,40 +33,56 @@ description = """The library's tests, tinygo, via scripts/tinygo-test.sh (CI's T
 still skips, and why (mostly routing: tinygo-org/net#55)."""
 run = "scripts/tinygo-test.sh"
 
+[tasks."test:servemux"]
+description = """servemux/'s tests (Go 1.26's ServeMux, which TinyGo apps mount on), with Go, including that it answers \
+like net/http's, and under TinyGo."""
+dir = "servemux"
+run = ["go test -count=1 ./...", "tinygo test ./..."]
+
 # ---- The examples: tested three ways, and served three ways -----------------------------------------------------
 #
 # An example's check_test.go crawls its app (tools/check) and compares every response with
 # testdata/check.generated.txt, recorded from reflect. lint-misuse is a linter fixture: its tests check the linter.
 
 [tasks.examples]
-description = """Every example's tests three ways (reflect, generated, tinygo), as a grid, then the first difference of \
-each failure. "no tests" marks an example with none yet."""
-shell = "bash -c"
+description = """Every example's tests three ways (reflect, generated, tinygo), one line each, then the first \
+difference of each failure. "no tests" marks an example with none yet. One example: example:<name>:test."""
+quiet = true
 run = '''
-fail=0; report=""
-gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
-printf '%-20s %-10s %-10s %-10s\n' example reflect generated tinygo
+fail=0
 for d in examples/*/; do
   name=$(basename "$d")
   [ "$name" = lint-misuse ] && continue
-  if [ -z "$(find "$d" -name '*_test.go' -print -quit)" ]; then printf '%-20s %s\n' "$name" "no tests"; continue; fi
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
-  row=()
-  for way in reflect generated tinygo; do
-    case $way in
-      reflect) cmd=(go test -count=1 ./...) ;;
-      generated) gen; cmd=(go test -count=1 -tags structpages_tables ./...) ;;
-      tinygo) gen -tags tinygo; cmd=(tinygo test ./...) ;;
-    esac
-    if out=$(cd "$d" && "${cmd[@]}" 2>&1); then
-      row+=(pass)
-    else
-      row+=(FAIL); fail=1
-      report+=$'\n'"== $name, $way:"$'\n'"$(grep -vE '^(FAIL|ok|\?)' <<<"$out" | head -14)"$'\n'
-    fi
-  done
-  printf '%-20s %-10s %-10s %-10s\n' "$name" "${row[@]}"
+  mise run _test "$name" || fail=1
 done
+exit $fail
+'''
+
+[tasks._test]
+description = "examples/<name>'s tests three ways, on one line, then the first difference of each failure."
+hide = true
+quiet = true
+shell = "bash -c"
+usage = '''arg "<name>" help="the example's folder under examples/"'''
+run = '''
+d="examples/$usage_name"; fail=0; report=""; row=""
+gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
+if [ -z "$(find "$d" -name '*_test.go' -print -quit)" ]; then printf '%-20s no tests\n' "$usage_name"; exit 0; fi
+if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
+for way in reflect generated tinygo; do
+  case $way in
+    reflect) cmd=(go test -count=1 ./...) ;;
+    generated) gen; cmd=(go test -count=1 -tags structpages_tables ./...) ;;
+    tinygo) gen -tags tinygo; cmd=(tinygo test ./...) ;;
+  esac
+  if out=$(cd "$d" && "${cmd[@]}" 2>&1); then
+    row+=$(printf '%-18s' "$way: pass")
+  else
+    row+=$(printf '%-18s' "$way: FAIL"); fail=1
+    report+=$'\n'"== $usage_name, $way:"$'\n'"$(grep -vE '^(FAIL|ok|\?)' <<<"$out" | head -14)"$'\n'
+  fi
+done
+printf '%-20s %s\n' "$usage_name" "$row"
 if [ -n "$report" ]; then echo "$report"; fi
 exit $fail
 '''
@@ -235,6 +251,16 @@ raw = true
 quiet = true
 run = "mise run _example todo tinygo"
 
+[tasks."example:todo:test"]
+description = "examples/todo's tests three ways: reflect, generated, tinygo."
+quiet = true
+run = "mise run _test todo"
+
+[tasks."example:todo:bench"]
+description = "examples/todo's benchmarks three ways, into examples/todo/BENCH.GENERATED.md."
+quiet = true
+run = "mise run _bench todo"
+
 [tasks."example:url-validation"]
 description = "Serve examples/url-validation on :8080, reflect."
 raw = true
@@ -328,39 +354,59 @@ echo "wrote BENCH-COMPARE.GENERATED.md"
 '''
 
 [tasks."bench:examples"]
-description = """Every example's BenchmarkCheck (its recorded GETs) three ways, compared with benchstat, into \
-BENCH-EXAMPLES.GENERATED.md. COUNT the runs of each (default 6), BENCHTIME each run's length (default 200ms)."""
-shell = "bash -c"
+description = """Every example's BenchmarkCheck (its recorded GETs) three ways, compared with benchstat, into the \
+example's own BENCH.GENERATED.md. One example: example:<name>:bench. COUNT the runs of each (default 6), BENCHTIME \
+each run's length (default 200ms)."""
+quiet = true
 run = '''
-set -euo pipefail
-flags=(-run NoTest -bench BenchmarkCheck -benchmem -count "${COUNT:-6}" -benchtime "${BENCHTIME:-200ms}")
-gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
-sections=""
 for d in examples/*/; do
   grep -qs 'func BenchmarkCheck' "$d/check_test.go" || continue
-  name=$(basename "$d")
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
-  echo "== $name: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
-  echo "== $name: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_tables "${flags[@]}" .)
-  echo "== $name: tinygo..."; gen -tags tinygo
-  tinygo=$(cd "$d" && tinygo test "${flags[@]}" . | sed -E 's/[[:space:]]+0 allocs\/op//')
-  result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$reflect") generated=<(echo "$generated") tinygo=<(echo "$tinygo"))
-  echo "$result"
-  sections+=$'\n'"## $name"$'\n\n```\n'"$result"$'\n```\n'
+  mise run _bench "$(basename "$d")" || exit 1
 done
-cat > BENCH-EXAMPLES.GENERATED.md <<EOF
+'''
+
+[tasks._bench]
+description = "examples/<name>'s BenchmarkCheck three ways, compared with benchstat, into its BENCH.GENERATED.md."
+hide = true
+quiet = true
+shell = "bash -c"
+usage = '''arg "<name>" help="the example's folder under examples/"'''
+run = '''
+set -euo pipefail
+d="examples/$usage_name/"; name=$usage_name
+if ! grep -qs 'func BenchmarkCheck' "$d/check_test.go"; then
+  echo "examples/$name has no BenchmarkCheck yet: add one to check_test.go, like examples/todo's" >&2; exit 2
+fi
+flags=(-run NoTest -bench BenchmarkCheck -benchmem -count "${COUNT:-6}" -benchtime "${BENCHTIME:-200ms}")
+gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
+if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
+echo "== $name: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
+echo "== $name: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_tables "${flags[@]}" .)
+echo "== $name: tinygo..."; gen -tags tinygo
+# TinyGo prints no -N CPU suffix or goos/pkg/cpu lines, and 0 for every allocs/op, so those are left out.
+tinygo=$(cd "$d" && tinygo test "${flags[@]}" . | sed -E 's/[[:space:]]+0 allocs\/op//')
+result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$reflect") generated=<(echo "$generated") tinygo=<(echo "$tinygo"))
+echo "$result"
+cat > "$d/BENCH.GENERATED.md" <<EOF
 <!-- Generated by \`mise run bench:examples\`. Do not edit: run it again. -->
 
-# Benchmark comparison: the examples
+# $name: benchmarks, three ways
 
-Each example's BenchmarkCheck times the GETs its check recorded (tools/check), three ways: reflect,
-generated (-tags structpages_tables) and tinygo (which reports no allocs/op).
+BenchmarkCheck (check_test.go) times each GET that $name's check recorded (testdata/check.generated.txt):
+
+- reflect: standard Go, structpages reading methods through reflect
+- generated: standard Go, reading generated code instead (-tags structpages_tables)
+- tinygo: TinyGo, which reads the generated code too; it reports no allocs/op
 
 Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ).
-$(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4). COUNT=${COUNT:-6} BENCHTIME=${BENCHTIME:-200ms}.
-$sections
+$(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$reflect" | sed -n 's/^cpu: //p').
+COUNT=${COUNT:-6} BENCHTIME=${BENCHTIME:-200ms}.
+
+\`\`\`
+$result
+\`\`\`
 EOF
-echo "wrote BENCH-EXAMPLES.GENERATED.md"
+echo "wrote ${d}BENCH.GENERATED.md"
 '''
 
 # ---- What upstream's CI checks, on standard Go --------------------------------------------------------------------
@@ -374,8 +420,8 @@ description = "Fail if any file needs gofmt (CI's Format job)."
 run = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
 
 [tasks.vet]
-description = "go vet on the library, tools/gen and tools/check (CI's Format job)."
-run = ["go vet ./...", "go vet -C tools/gen ./...", "go vet -C tools/check ./..."]
+description = "go vet on the library, tools/gen, tools/check and servemux (CI's Format job)."
+run = ["go vet ./...", "go vet -C tools/gen ./...", "go vet -C tools/check ./...", "go vet -C servemux ./..."]
 
 [tasks.lint]
 description = "golangci-lint on the library, tools/gen and tools/check (CI's Lint job)."

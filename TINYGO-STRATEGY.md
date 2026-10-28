@@ -77,9 +77,9 @@ Apple M2 Pro:
 - **TinyGo vs Go, reflection: about 3.4× the time and 2–3× the bytes.** Generated costs about the same as reflection
   on Go, so this gap is TinyGo's compiler, runtime and garbage collector, not structpages. A simple GET is 2.5µs. These
   TinyGo runs are native binaries, not WebAssembly.
-- **A real page** (`mise run bench:examples`, into [BENCH-EXAMPLES.GENERATED.md](./BENCH-EXAMPLES.GENERATED.md)):
-  `todo`'s `GET /` takes 9.8µs with reflection, **7.6µs generated (23% faster, a fifth fewer allocations)**, and
-  34µs under TinyGo.
+- **A real page** (`mise run bench:examples`, into [examples/todo/BENCH.GENERATED.md](./examples/todo/BENCH.GENERATED.md)):
+  `todo`'s `GET /` takes 9.6µs with reflection, **7.4µs generated (23% faster, a fifth fewer allocations)**, and
+  30µs under TinyGo.
 
 **Generator gaps** (`generator_gaps_test.go`: one test per app pattern, run all three ways by the suite; reflection's
 answer is the one the other two must give):
@@ -127,6 +127,12 @@ In order:
    copied Go's `ServeMux` into the library and was reverted the same day; whatever lands, the checker in step 1 says
    whether it works. In parallel, follow [tinygo-org/net#56](https://github.com/tinygo-org/net/pull/56), which fixes
    method patterns but not escaped slashes.
+
+   **Status: done for `todo`.** `servemux/` is Go 1.26's `ServeMux` as Go wrote it, with Go's tests, its own module;
+   they pass with Go and under TinyGo (`mise run test:servemux`). `todo` mounts on it in TinyGo builds
+   (`mux_tinygo.go`) and on `net/http`'s elsewhere (`mux.go`); structpages itself is unchanged. `todo`'s check now
+   passes all three ways, and served in workerd its toggle and delete work. The other examples follow when they get
+   `todo`'s shape.
 3. **Run the TinyGo way where it will really run.** Serve each example's handler from `workerd`, locally, through
    workers-go (go-htmx4 pins workerd and TinyGo in mise for this). Then the checker can also crawl it over HTTP, and
    the WebAssembly's start-up time and size per request can be measured; for Workers those matter more than
@@ -162,7 +168,7 @@ In order:
 mise run test:tinygo -v           # library: what TinyGo still skips, and why
 mise run examples                # every example's tests three ways, as a grid
 mise run example:todo:tinygo      # serve todo as WebAssembly in workerd (and :generated, and plain)
-mise run bench:examples           # every example's pages three ways, into BENCH-EXAMPLES.GENERATED.md
+mise run bench:examples           # every example's pages three ways, into its BENCH.GENERATED.md
 mise run bench:compare            # Go, reflection vs Go, generated vs TinyGo, into BENCH-COMPARE.GENERATED.md
 mise run ci:go                    # everything upstream's CI checks on Go
 ```

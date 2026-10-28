@@ -28,8 +28,8 @@ TinyGo's `reflect` can't list or call methods, read a function type's parameters
 needs all four, so everything it reads about methods and functions goes through one small set of functions with two
 implementations, picked by build tag:
 
-- `reflect_dynamic.go` (dynamic): `reflect`, exactly as before.
-- `reflect_static.go` (static and static-worker): what `structpages generate` (`tools/gen`) generates. It writes
+- `methods_dynamic.go` (dynamic): `reflect`, exactly as before.
+- `methods_static.go` (static and static-worker): what `structpages generate` (`tools/gen`) generates. It writes
   `structpages.generated.go` into each package with pages, next to the pages: generated code can only name a
   package's unexported types from inside that package, as with gsx's `.x.go`. The files only build with the tag or
   under TinyGo, so the dynamic build ignores them whether they exist or not.
@@ -157,7 +157,7 @@ In order:
    direct calls and cache each method's entry instead of looking it up per call. On TinyGo the cost is TinyGo itself.
 7. **Delete the generated-code support when TinyGo catches up.** Once TinyGo's `reflect` can list and call methods
    ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and name functions
-   ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)), the comment at the top of `reflect_static.go`
+   ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)), the comment at the top of `methods_static.go`
    lists what to remove, if static isn't worth keeping on its own by then. `mise run test` with no
    generated files is the check.
 

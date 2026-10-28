@@ -3,5 +3,5 @@
 package structpages
 
 // staticBuild reports whether structpages reads methods from generated
-// code (reflect_static.go) instead of reflect.
+// code (methods_static.go) instead of reflect.
 const staticBuild = false

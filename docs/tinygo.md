@@ -51,7 +51,7 @@ for `examples/todo`, in a temporary folder it deletes on Ctrl-C.
 
 Two things exist for TinyGo's gaps, each with a comment saying how to remove it:
 
-- **The generated code** (`reflect_static.go`, package `generated`, `structpages generate`): TinyGo's `reflect` can't
+- **The generated code** (`methods_static.go`, package `generated`, `structpages generate`): TinyGo's `reflect` can't
   list or call methods ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and `runtime.FuncForPC`
   returns nil ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)). Once a TinyGo release has both,
   TinyGo builds no longer need it; whether the standard toolchain's static build stays is a choice of its own.

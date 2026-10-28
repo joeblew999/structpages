@@ -7,7 +7,7 @@
 // structpages generate writes a file into each package with pages
 // (structpages.generated.go) that fills it in at init, and structpages reads
 // it there instead of reflect. Nothing here is meant to be written by hand;
-// see the docs on generated code, and structpages' reflect_static.go for
+// see the docs on generated code, and structpages' methods_static.go for
 // when TinyGo needs it no more.
 //
 // Every Add function is for init functions: what they add is read without

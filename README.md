@@ -163,8 +163,8 @@ two implementations, picked by build tag:
 
 | Build | Implementation | Methods come from |
 |---|---|---|
-| standard Go (default) | `reflect_dynamic.go` | `reflect`, at run time, as before: nothing changes for Go users |
-| TinyGo, or Go with `-tags structpages_static` | `reflect_static.go` | code generated ahead of time by `tools/gen` |
+| standard Go (default) | `methods_dynamic.go` | `reflect`, at run time, as before: nothing changes for Go users |
+| TinyGo, or Go with `-tags structpages_static` | `methods_static.go` | code generated ahead of time by `tools/gen` |
 
 So structpages runs three ways: **dynamic** (standard Go, the default: methods found at run time with `reflect`),
 **static** (standard Go, methods known at compile time from the generated code) and **static-worker** (a Cloudflare

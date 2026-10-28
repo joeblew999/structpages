@@ -12,7 +12,7 @@
 // what the package's tests declare (structpages.generated_test.go).
 // Run it again whenever a page's methods change; stale generated code fails
 // at Mount.
-// structpages' reflect_static.go says why TinyGo needs this, and when it
+// structpages' methods_static.go says why TinyGo needs this, and when it
 // won't.
 //
 // -C runs it as if from dir, the way go -C does: packages load from there,

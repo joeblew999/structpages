@@ -19,21 +19,25 @@ tinygo test ./...
 Routing needs nothing from you: TinyGo's `net/http` comes from [tinygo-org/net](https://github.com/tinygo-org/net),
 whose `ServeMux` still routes like Go 1.21's ([net#55](https://github.com/tinygo-org/net/issues/55); a fix waits in
 [net#56](https://github.com/tinygo-org/net/pull/56)), so in a TinyGo build `Mount` routes through its own copy of Go's
-(see [Generated code: Routing](./generated.md#routing)).
+(see [Static builds: Routing](./static.md#routing)).
 
 ## Serving as a Worker
 
 A WebAssembly build can't listen on a socket: in a Worker, workerd (Cloudflare's runtime, locally) or Cloudflare
-delivers the requests. `github.com/jackielii/structpages/workers` serves the same handler both ways:
+delivers the requests. So the app keeps its ordinary `main` for every other build, and adds a second one, in a file
+built only for the Worker, that serves the same handler through `github.com/jackielii/structpages/workers`:
 
 ```go
-mux := http.NewServeMux()
-structpages.Mount(mux, index{}, "/", "App")
-log.Fatal(workers.Serve(":8080", mux))
+//go:build js && wasm
+
+package main
+
+func main() { workers.Serve(handler()) }
 ```
 
-On the standard toolchain `workers.Serve` is `ListenAndServe`. In a Worker it hands the app every request, one Go
-runtime serving them all; workers-go's own `Serve` starts a new one per request, keeping nothing between them. The
+Its ordinary `main` goes in a file built `!(js && wasm)`, with `http.ListenAndServe(":8080", handler())`, as
+`examples/todo`'s `main_server.go` and `main_worker.go` do. In a Worker `workers.Serve` hands the app every request,
+one Go runtime serving them all; workers-go's own `Serve` starts a new one per request, keeping nothing between them. The
 Worker also needs JavaScript glue and a workerd config next to its `app.wasm`:
 
 ```bash

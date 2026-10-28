@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/jackielii/structpages"
-	"github.com/jackielii/structpages/workers"
 )
 
 type Todo struct {
@@ -62,8 +61,8 @@ func removeTodo(id int) {
 }
 
 // handler builds the app: the pages mounted on their own mux, with some
-// sample todos. main serves it (workers.Serve, which also serves it as a
-// Worker under TinyGo); e2e_test.go calls it directly.
+// sample todos. main serves it: main_server.go on a server, main_worker.go
+// as a Cloudflare Worker. e2e_test.go calls it directly.
 func handler() http.Handler {
 	// Add some sample todos
 	addTodo("Learn Go")
@@ -81,11 +80,6 @@ func handler() http.Handler {
 	}
 	_ = sp // sp provides URLFor and IDFor methods
 	return mux
-}
-
-func main() {
-	log.Println("Starting TODO app on :8080")
-	log.Fatal(workers.Serve(":8080", handler()))
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {

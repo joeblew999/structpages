@@ -128,9 +128,13 @@ echo "Every generated file is committed."
 
 # ---- examples/todo: its tasks, one per step, in the order they run -----------------------------------------------
 #
-# Each task runs in examples/todo and depends on the one before it, so running one runs the steps before it first:
-#   generate:gsx -> generate:structpages-static -> generate:e2e -> test, bench, or serve:dynamic / :static / :static-worker
-# `mise tasks deps example:todo:test` prints the chain.
+# Each task runs in examples/todo, after the tasks it depends on:
+#   generate:gsx -> generate:structpages-static -> generate:e2e
+#     -> test:dynamic, test:static, test:static-worker
+#     -> build:dynamic -> serve:dynamic
+#     -> build:static  -> serve:static
+# serve:static-worker and bench still run structpages-dev's old form, until their pieces.
+# Builds go in examples/todo/build/ (gitignored). `mise tasks deps example:todo:serve:static` prints a chain.
 
 [tasks."example:todo:generate:gsx"]
 description = "todo: gsx makes the .x.go files."
@@ -181,19 +185,31 @@ depends = ["example:todo:generate"]
 quiet = true
 run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} bench examples/todo"
 
-[tasks."example:todo:serve:dynamic"]
-description = "examples/todo, step 4: serve it on :8080 until Ctrl-C, dynamic."
+[tasks."example:todo:build:dynamic"]
+description = "todo: build it, dynamic, into build/dynamic."
 depends = ["example:todo:generate"]
+dir = "examples/todo"
+run = "go build -o build/dynamic ."
+
+[tasks."example:todo:build:static"]
+description = "todo: build it, static, into build/static."
+depends = ["example:todo:generate"]
+dir = "examples/todo"
+run = "go build -tags structpages_static -o build/static ."
+
+[tasks."example:todo:serve:dynamic"]
+description = "todo: serve its dynamic build on :8080 until Ctrl-C."
+depends = ["example:todo:build:dynamic", "tools:dev"]
+dir = "examples/todo"
 raw = true
-quiet = true
-run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} serve examples/todo dynamic"
+run = "structpages-dev serve dynamic"
 
 [tasks."example:todo:serve:static"]
-description = "examples/todo, step 4: serve it on :8080 until Ctrl-C, static."
-depends = ["example:todo:generate"]
+description = "todo: serve its static build on :8080 until Ctrl-C."
+depends = ["example:todo:build:static", "tools:dev"]
+dir = "examples/todo"
 raw = true
-quiet = true
-run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} serve examples/todo static"
+run = "structpages-dev serve static"
 
 [tasks."example:todo:serve:static-worker"]
 description = "examples/todo, step 4: serve it on :8080 until Ctrl-C, static-worker: WebAssembly in workerd."

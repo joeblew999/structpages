@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -17,8 +18,14 @@ import (
 // so does the workerd config structpages-workers writes.
 const addr = "localhost:8080"
 
-// serve is the serve command: one app served one way on addr until Ctrl-C.
+// serve is the serve command. With a way, it is one step: the current
+// folder's build for that way, build/<way>, which its build task made,
+// served on addr until Ctrl-C. With a folder and a way, it builds the folder
+// that way first, into a temporary folder.
 func serve(args []string) int {
+	if len(args) == 1 && slices.Contains(ways, args[0]) {
+		return serveBuild(newFolder("."), args[0])
+	}
 	if len(args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev serve folder dynamic|static|static-worker")
 		return 2
@@ -33,6 +40,38 @@ func serve(args []string) int {
 	err = <-s.done
 	s.stop()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, "structpages-dev: the server stopped:", err)
+		return 1
+	}
+	return 0
+}
+
+// serveBuild runs f's build for way, build/<way>, on addr until Ctrl-C.
+func serveBuild(f folder, way string) int {
+	if way == "static-worker" {
+		fmt.Fprintln(os.Stderr, "structpages-dev: serve static-worker isn't one step yet: use serve folder static-worker")
+		return 2
+	}
+	bin := filepath.Join(f.abs, "build", way)
+	if !fileExists(bin) {
+		fail(fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", bin, f.name, way))
+	}
+	if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
+		_ = c.Close()
+		fail(fmt.Errorf("%s is in use: stop what is on it first", addr))
+	}
+	about := ""
+	if way != "dynamic" {
+		about = ", reading this generated code instead of reflect:" + listGenerated(f)
+	}
+	cmd := exec.Command(bin) //nolint:gosec // the folder's own build
+	cmd.Dir, cmd.Stdout, cmd.Stderr = f.dir, os.Stdout, os.Stderr
+	if err := cmd.Start(); err != nil {
+		fail(err)
+	}
+	onInterrupt(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	fmt.Printf("%s, %s: http://%s%s\nCtrl-C stops it.\n", f.name, way, addr, about)
+	if err := cmd.Wait(); err != nil {
 		fmt.Fprintln(os.Stderr, "structpages-dev: the server stopped:", err)
 		return 1
 	}

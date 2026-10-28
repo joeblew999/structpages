@@ -470,7 +470,8 @@ page (not a `ServeHTTP` page).
 since gsx lowers them to those calls. It also flags hard-coded internal URLs in `href`/`hx-*`/`action`
 attributes and route-shaped string literals in Go, `RenderTarget.Is` arguments that aren't a mounted
 method or a function (`t.Is(p.Content())` calls instead of naming), and a `Mount` with no
-`WithTargetSelector` whose pages' templates use htmx (`selector`). The compiler can't see any of this, because routes,
+`WithTargetSelector` whose pages' templates use htmx (`selector`), and a page rendering another page's region
+id, which would get its whole Page swapped in (`region`). The compiler can't see any of this, because routes,
 `Ref`s and param keys are strings to it. In a large app, where a route rename touches templates across many
 packages, the linter is what turns a wave of 404s into a CI failure.
 

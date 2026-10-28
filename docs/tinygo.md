@@ -58,13 +58,10 @@ structpages registers Go 1.22 patterns, so in a TinyGo build give `Mount` a mux 
 
 ## When TinyGo catches up
 
-Two things exist only for TinyGo's gaps, each with a comment saying how to remove it:
+One thing exists only for TinyGo's gaps, with a comment saying how to remove it:
 
 - **The tables** (`reflect_tables.go`, package `tables`, `structpages-gen`): TinyGo's `reflect` can't list or call
   methods ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and `runtime.FuncForPC` returns nil
   ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)). Once a TinyGo release has both, delete them
   and the build constraints on `reflect_runtime.go`; the suite must pass under `tinygo test` with no generated
   tables.
-- **The benchmarks' `//go:build !tinygo`**: TinyGo 0.43's compiler crashes building `struct_pages_bench_test.go`,
-  whose local `index` types clash with a package-level one (the file says how). Drop the constraint once `tinygo test`
-  builds it.

@@ -1,11 +1,9 @@
 // TinyGo 0.43 gives a function-local type's promoted method the symbol of a
 // package-level type's method with the same name (tinygo-org/tinygo#5845's
-// kind of clash): the local `index` types below embed pages, and url_for_test.go
-// has a package-level `index` with its own Page. Building this file, its
-// compiler panics (index out of range in createFunction), so TinyGo test runs
-// leave the benchmarks out. Drop the constraint once `tinygo test` builds it.
-
-//go:build !tinygo
+// kind of clash), and its compiler panics building the file (index out of
+// range in createFunction). So the local types below don't reuse a
+// package-level type's name: benchRoot, not index (url_for_test.go has one),
+// and benchUserList, not userList (generics_injection_test.go).
 
 package structpages
 
@@ -86,13 +84,13 @@ func BenchmarkParsing(b *testing.B) {
 		type team struct{}
 		type contact struct{}
 		type about struct{}
-		type index struct {
+		type benchRoot struct {
 			product `route:"/product Product"`
 			team    `route:"/team Team"`
 			contact `route:"/contact Contact"`
 			about   `route:"/about About"`
 		}
-		p := index{}
+		p := benchRoot{}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -102,22 +100,22 @@ func BenchmarkParsing(b *testing.B) {
 
 	b.Run("parsePageTree_Complex", func(b *testing.B) {
 		type user struct{}
-		type userList struct{}
+		type benchUserList struct{}
 		type post struct{}
 		type comment struct{}
 		type admin struct {
-			user     `route:"/users/{id} User"`
-			userList `route:"/users Users"`
+			user          `route:"/users/{id} User"`
+			benchUserList `route:"/users Users"`
 		}
 		type blog struct {
 			post    `route:"/posts/{id} Post"`
 			comment `route:"/posts/{postId}/comments/{id} Comment"`
 		}
-		type index struct {
+		type benchRoot struct {
 			admin `route:"/admin Admin"`
 			blog  `route:"/blog Blog"`
 		}
-		p := index{}
+		p := benchRoot{}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -134,14 +132,14 @@ func BenchmarkMount(b *testing.B) {
 	b.Run("Mount_Simple_3Routes", func(b *testing.B) {
 		type product struct{}
 		type team struct{}
-		type index struct {
+		type benchRoot struct {
 			product `route:"/product Product"`
 			team    `route:"/team Team"`
 		}
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			mux := http.NewServeMux()
-			_, _ = Mount(mux, index{}, "/", "Index")
+			_, _ = Mount(mux, benchRoot{}, "/", "Index")
 		}
 	})
 
@@ -180,21 +178,21 @@ func BenchmarkMount(b *testing.B) {
 			p9  `route:"/p9 P9"`
 			p10 `route:"/p10 P10"`
 		}
-		type index struct {
+		type benchRoot struct {
 			section1 `route:"/section1 Section1"`
 			section2 `route:"/section2 Section2"`
 		}
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			mux := http.NewServeMux()
-			_, _ = Mount(mux, index{}, "/", "Index")
+			_, _ = Mount(mux, benchRoot{}, "/", "Index")
 		}
 	})
 
 	b.Run("Mount_WithMiddleware", func(b *testing.B) {
 		type product struct{}
 		type team struct{}
-		type index struct {
+		type benchRoot struct {
 			product `route:"/product Product"`
 			team    `route:"/team Team"`
 		}
@@ -206,7 +204,7 @@ func BenchmarkMount(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			mux := http.NewServeMux()
-			_, _ = Mount(mux, index{}, "/", "Index", WithMiddlewares(mw))
+			_, _ = Mount(mux, benchRoot{}, "/", "Index", WithMiddlewares(mw))
 		}
 	})
 }
@@ -267,12 +265,12 @@ func BenchmarkRequestHandling(b *testing.B) {
 	})
 
 	b.Run("ServeHTTP_WithParams", func(b *testing.B) {
-		type index struct {
+		type benchRoot struct {
 			benchProduct `route:"/product/{id} Product"`
 		}
 
 		mux := http.NewServeMux()
-		sp, _ := Mount(mux, index{}, "/", "Index")
+		sp, _ := Mount(mux, benchRoot{}, "/", "Index")
 		_ = sp
 
 		req := httptest.NewRequest("GET", "/product/123", nil)
@@ -348,12 +346,12 @@ func BenchmarkRequestHandling(b *testing.B) {
 
 func BenchmarkURLGeneration(b *testing.B) {
 	type product struct{}
-	type index struct {
+	type benchRoot struct {
 		product `route:"/product/{id} Product"`
 	}
 
 	mux := http.NewServeMux()
-	sp, _ := Mount(mux, index{}, "/", "Index")
+	sp, _ := Mount(mux, benchRoot{}, "/", "Index")
 	ctx := pcCtx.WithValue(context.Background(), sp.pc)
 
 	b.Run("URLFor_NoParams", func(b *testing.B) {
@@ -607,11 +605,11 @@ func BenchmarkIDGeneration(b *testing.B) {
 // the existing typed/Ref forms.
 func BenchmarkURLGenerationV05(b *testing.B) {
 	type product struct{}
-	type index struct {
+	type benchRoot struct {
 		product `route:"/product/{id} Product"`
 	}
 	mux := http.NewServeMux()
-	sp, _ := Mount(mux, index{}, "/", "Index")
+	sp, _ := Mount(mux, benchRoot{}, "/", "Index")
 	ctx := pcCtx.WithValue(context.Background(), sp.pc)
 	args := map[string]any{"id": "123"}
 
@@ -769,7 +767,7 @@ func BenchmarkReflection(b *testing.B) {
 			b.Fatal(err)
 		}
 		pn := pc.root
-		method, ok := reflect.TypeOf(benchTestPage{}).MethodByName("TestMethod")
+		method, ok := methodByName(reflect.TypeOf(benchTestPage{}), "TestMethod")
 		if !ok {
 			b.Fatal("method not found")
 		}
@@ -787,7 +785,7 @@ func BenchmarkReflection(b *testing.B) {
 			b.Fatal(err)
 		}
 		pn := pc.root
-		method, ok := reflect.TypeOf(benchTestPageWithDI{}).MethodByName("TestMethod")
+		method, ok := methodByName(reflect.TypeOf(benchTestPageWithDI{}), "TestMethod")
 		if !ok {
 			b.Fatal("method not found")
 		}
@@ -800,7 +798,7 @@ func BenchmarkReflection(b *testing.B) {
 	})
 
 	b.Run("isComponent", func(b *testing.B) {
-		method, _ := reflect.TypeOf(benchTestPage{}).MethodByName("TestMethod")
+		method, _ := methodByName(reflect.TypeOf(benchTestPage{}), "TestMethod")
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			_ = isComponent(&method)
@@ -854,12 +852,12 @@ func BenchmarkEndToEnd(b *testing.B) {
 	})
 
 	b.Run("CompleteFlow_WithURLGeneration", func(b *testing.B) {
-		type index struct {
+		type benchRoot struct {
 			benchProduct `route:"/product/{id} Product"`
 		}
 
 		mux := http.NewServeMux()
-		sp, _ := Mount(mux, index{}, "/", "Index")
+		sp, _ := Mount(mux, benchRoot{}, "/", "Index")
 		ctx := pcCtx.WithValue(context.Background(), sp.pc)
 
 		b.ReportAllocs()

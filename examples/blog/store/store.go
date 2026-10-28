@@ -15,6 +15,10 @@ var (
 	ErrDuplicate = errors.New("duplicate")
 )
 
+// Now is the store's clock: time.Now, fixed by blog's e2e test so the demo's
+// dates, a few days before today when served, are the same every run.
+var Now = time.Now
+
 // Store is an in-memory, mutex-protected datastore. Every method takes the
 // lock at most once and returns copies so callers can read concurrently.
 type Store struct {
@@ -216,7 +220,7 @@ func (s *Store) CreatePost(p Post) (Post, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if p.CreatedAt.IsZero() {
-		p.CreatedAt = time.Now()
+		p.CreatedAt = Now()
 	}
 	if p.Slug == "" {
 		p.Slug = slugify(p.Title)
@@ -277,7 +281,7 @@ func (s *Store) AddComment(postID int, author, body string) (Comment, error) {
 		PostID:    postID,
 		Author:    author,
 		Body:      body,
-		CreatedAt: time.Now(),
+		CreatedAt: Now(),
 	}
 	s.comments[postID] = append(s.comments[postID], c)
 	return *c, nil

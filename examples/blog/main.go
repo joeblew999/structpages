@@ -32,7 +32,10 @@ type rootPages struct {
 	admin     admin.Pages     `route:"/admin Admin"`
 }
 
-func main() {
+// handler builds the app: a demo store and its sessions, and the pages
+// mounted on their own mux. main serves it: main_server.go on a server,
+// main_worker.go as a Cloudflare Worker. e2e_test.go calls it directly.
+func handler() http.Handler {
 	s := store.New()
 	store.SeedDemo(s)
 	authSvc := auth.New(s)
@@ -46,9 +49,7 @@ func main() {
 	); err != nil {
 		log.Fatalf("mount: %v", err)
 	}
-
-	log.Println("listening on http://localhost:8080  (admin: admin/admin)")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	return mux
 }
 
 // errorHandler renders our own error component instead of net/http's plain

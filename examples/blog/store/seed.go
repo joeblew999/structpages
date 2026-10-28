@@ -12,7 +12,7 @@ func SeedDemo(s *Store) {
 	guides, _ := s.CreateCategory(Category{Slug: "guides", Name: "Guides"})
 	_, _ = s.CreateCategory(Category{Slug: "release-notes", Name: "Release Notes"})
 
-	now := time.Now()
+	now := Now()
 	posts := []Post{
 		{
 			Slug:       "welcome",

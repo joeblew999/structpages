@@ -30,12 +30,6 @@ golangci-lint = "2"
 # structpages-dev, which tools:dev builds, is on the path for every task.
 _.path = ["{{config_root}}/build/bin"]
 
-[vars]
-# structpages-dev from this repository, working in its root; the folder and what to do follow.
-dev = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}}"
-# structpages-static generate from this repository (step 2); -C, the folder, follows.
-structpages_static = "go run -C tools/static ./cmd/structpages-static generate"
-
 # ---- This repository's dev tool -----------------------------------------------------------------------------------
 
 [tasks."tools:dev"]
@@ -44,40 +38,61 @@ sources = ["tools/dev/**/*.go", "tools/dev/go.mod"]
 outputs = ["build/bin/structpages-dev"]
 run = "go build -C tools/dev -o {{config_root}}/build/bin/structpages-dev ./cmd/structpages-dev"
 
-# ---- Generate: each folder's generated files, in THE ORDER above ---------------------------------------------------
+# ---- The library (the root folder): its tasks, one per step, in the order they run ---------------------------------
+#
+# Each task runs in the root folder, after the tasks it depends on:
+#   generate -> test:dynamic, test:static, test:static-worker
+#   generate -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+# The library is no app, so it has no e2e test, build or serve. Its generated files are for its own tests' static and
+# static-worker builds, and gitignored.
 
 [tasks.generate]
-description = """The library's generated files (step 2), for its own tests' static and static-worker builds: gitignored. \
-test, bench, vet and lint run it first."""
-run = "{{vars.structpages_static}} -C {{config_root}} -test ./..."
+description = "The library: structpages-static generate makes its tests' generated files (gitignored)."
+run = "go run -C tools/static ./cmd/structpages-static generate -C {{config_root}} -test ./..."
 
-[tasks."examples:generate"]
-description = "Every example's generate task: each example's generated files, in order."
-depends = [
-  "example:blog:generate",
-  "example:html-template:generate",
-  "example:htmx:generate",
-  "example:htmx-render-target:generate",
-  "example:lint-misuse:generate",
-  "example:simple:generate",
-  "example:todo:generate",
-  "example:url-validation:generate",
-]
+[tasks."test:dynamic"]
+description = "The library: test it, dynamic."
+depends = ["generate", "tools:dev"]
+run = "structpages-dev test dynamic"
 
-[tasks."generated:check"]
-description = """Every generate task, then fail if a generated file the examples commit (.x.go, \
-structpages_static.generated.go, testdata/e2e.generated.txt) changed or is new and isn't added to git: commit it with the code \
-it comes from. CI checks the same on a fresh checkout."""
-depends = ["generate", "examples:generate"]
-run = '''
-changed=$(git status --porcelain --untracked-files=all -- '*.x.go' '*.generated.go' '*.generated_test.go' '*.generated.txt' | grep '^.[^ ]' || true)
-if [ -n "$changed" ]; then
-  echo "These generated files changed and aren't added to git: commit them with the code they come from."
-  echo "$changed"
-  exit 1
-fi
-echo "Every generated file is committed."
-'''
+[tasks."test:static"]
+description = "The library: test it, static."
+depends = ["generate", "tools:dev"]
+run = "structpages-dev test static"
+
+[tasks."test:static-worker"]
+description = "The library: test it, static-worker."
+depends = ["generate", "tools:dev"]
+run = "structpages-dev test static-worker"
+
+[tasks.test]
+description = "The library: test it all three ways."
+depends = ["test:dynamic", "test:static", "test:static-worker"]
+
+# The bench tasks time one way at a time: wait_for waits for a task only if it is running, so bench:static alone runs
+# just itself.
+
+[tasks."bench:dynamic"]
+description = "The library: time its benchmarks, dynamic, into build/bench/."
+depends = ["generate", "tools:dev"]
+run = "structpages-dev bench dynamic"
+
+[tasks."bench:static"]
+description = "The library: time its benchmarks, static, into build/bench/."
+depends = ["generate", "tools:dev"]
+wait_for = ["bench:dynamic"]
+run = "structpages-dev bench static"
+
+[tasks."bench:static-worker"]
+description = "The library: time its benchmarks, static-worker, into build/bench/."
+depends = ["generate", "tools:dev"]
+wait_for = ["bench:static"]
+run = "structpages-dev bench static-worker"
+
+[tasks.bench]
+description = "The library: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
+depends = ["bench:dynamic", "bench:static", "bench:static-worker"]
+run = "structpages-dev report"
 
 # ---- examples/blog: its tasks, one per step, in the order they run ---------------------------------------------------
 #
@@ -991,30 +1006,25 @@ depends = ["example:url-validation:build", "example:url-validation:bench:dynamic
 dir = "examples/url-validation"
 run = "structpages-dev report"
 
-# ---- Tests, three ways: the library and each example, the same way -------------------------------------------------
-#
-# An example's e2e_test.go crawls its app (the e2e package) and compares every response with
-# testdata/e2e.generated.txt, recorded from the dynamic build in its generate task. lint-misuse is a linter fixture:
-# its tests check the linter.
+# ---- Every example at once -------------------------------------------------------------------------------------------
 
-[tasks.test]
-description = """The library's tests three ways (dynamic and static with the race detector, which TinyGo lacks): \
-a line with how many passed each way, then every test skipped, with why, and the first lines of any failure."""
-depends = ["generate"]
-quiet = true
-run = "{{vars.dev}} test ."
+[tasks."examples:generate"]
+description = "Every example's generate task: each example's generated files, in order."
+depends = [
+  "example:blog:generate",
+  "example:html-template:generate",
+  "example:htmx:generate",
+  "example:htmx-render-target:generate",
+  "example:lint-misuse:generate",
+  "example:simple:generate",
+  "example:todo:generate",
+  "example:url-validation:generate",
+]
 
 [tasks.examples]
 description = """Every example's tests, each the ways it runs (all three, or dynamic and static for html-template and \
 lint-misuse): a line each way. One example: example:<name>:test."""
 depends = ["example:blog:test", "example:html-template:test", "example:htmx:test", "example:htmx-render-target:test", "example:lint-misuse:test", "example:simple:test", "example:todo:test", "example:url-validation:test"]
-
-[tasks.bench]
-description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
-BENCH_GENERATED.md."""
-depends = ["generate"]
-quiet = true
-run = "{{vars.dev}} bench ."
 
 [tasks."bench:examples"]
 description = """Every example's benchmarks, each into its own BENCH_GENERATED.md, one example after another so no two \
@@ -1048,12 +1058,23 @@ exit $fail
 
 [tasks."ci:go"]
 description = """Everything CI checks on standard Go: fmt, vet, lint, generated:check, then the library and every \
-example built and tested the dynamic way, as test and examples do."""
-depends = ["fmt", "vet", "lint", "generated:check", "example:blog:test:dynamic", "example:html-template:test:dynamic", "example:htmx:test:dynamic", "example:htmx-render-target:test:dynamic", "example:lint-misuse:test:dynamic", "example:simple:test:dynamic", "example:todo:test:dynamic", "example:url-validation:test:dynamic"]
-quiet = true
-run = [
-  "{{vars.dev}} test -ways dynamic .",
-]
+example tested the dynamic way."""
+depends = ["fmt", "vet", "lint", "generated:check", "test:dynamic", "example:blog:test:dynamic", "example:html-template:test:dynamic", "example:htmx:test:dynamic", "example:htmx-render-target:test:dynamic", "example:lint-misuse:test:dynamic", "example:simple:test:dynamic", "example:todo:test:dynamic", "example:url-validation:test:dynamic"]
+
+[tasks."generated:check"]
+description = """Every generate task, then fail if a generated file the examples commit (.x.go, \
+structpages_static.generated.go, testdata/e2e.generated.txt) changed or is new and isn't added to git: commit it with the code \
+it comes from. CI checks the same on a fresh checkout."""
+depends = ["generate", "examples:generate"]
+run = '''
+changed=$(git status --porcelain --untracked-files=all -- '*.x.go' '*.generated.go' '*.generated_test.go' '*.generated.txt' | grep '^.[^ ]' || true)
+if [ -n "$changed" ]; then
+  echo "These generated files changed and aren't added to git: commit them with the code they come from."
+  echo "$changed"
+  exit 1
+fi
+echo "Every generated file is committed."
+'''
 
 [tasks.fmt]
 description = "Fail if any file needs gofmt (CI's Format job)."

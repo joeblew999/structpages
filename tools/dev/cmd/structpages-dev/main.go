@@ -1,38 +1,34 @@
-// Command structpages-dev builds, tests, benchmarks and serves one folder of
-// this repository (the structpages library, ., or an example, such as
-// examples/todo) the three ways structpages runs: dynamic (the standard
-// build, finding the app's methods at run time with reflect), static (the
-// standard toolchain with -tags structpages_static, reading the code
-// structpages-static generate writes instead) and static-worker (a Cloudflare Worker,
-// TinyGo WebAssembly, which always reads that code):
+// Command structpages-dev is this repository's dev tool, which its mise.toml
+// runs: each command is one step, on the folder it runs in (the structpages
+// library, or an example), for one of the three ways structpages runs:
+// dynamic (the standard build, finding the app's methods at run time with
+// reflect), static (the standard toolchain with -tags structpages_static,
+// reading the code structpages-static generate writes instead) and
+// static-worker (a Cloudflare Worker, TinyGo WebAssembly, which always reads
+// that code):
 //
 //	structpages-dev test dynamic|static|static-worker
-//	structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder
 //	structpages-dev bench dynamic|static|static-worker
 //	structpages-dev report
-//	structpages-dev [-C dir] bench folder
 //	structpages-dev serve dynamic|static|static-worker
-//	structpages-dev [-C dir] serve folder dynamic|static|static-worker
 //
-// It is this repository's, run by its mise.toml, and it generates nothing:
-// each folder's generate task there makes the folder's generated files first,
-// in order, and the tasks running structpages-dev depend on it. Which folders
-// to run it on is mise.toml's to say too. An app outside this repository uses
-// the pieces directly: structpages-static generate, the e2e package, workers and
-// structpages-workers (docs/static.md, docs/tinygo.md).
+// It generates and builds nothing an app needs: mise.toml's generate and
+// build tasks do, and the tasks running structpages-dev depend on them, so the
+// order of the steps is mise.toml's to say. An app outside this repository
+// uses the pieces directly: structpages-static generate, the e2e package,
+// workers and structpages-workers (docs/static.md, docs/tinygo.md).
 //
-// test builds every package and runs the tests each way (with the race
-// detector, which TinyGo lacks), and prints a line: how many passed each way,
-// then every test skipped with why, and the failing tests' own output. bench
-// runs the folder's benchmarks in-process and, for an app serving through
-// workers.Serve, as served, and writes the folder's BENCH_GENERATED.md. serve
-// serves an app on :8080 until Ctrl-C: go run on the standard toolchain, and
-// under TinyGo a Worker in workerd, built into a temporary folder that
-// stopping deletes.
+// test builds every package and runs the tests that way (with the race
+// detector, but under TinyGo, which lacks it), and prints a line: how many
+// passed, every test skipped with why, and the failing tests' own output.
+// bench times the folder's benchmarks that way, in-process and, for an app,
+// its build served, into build/bench/, and report compares the ways it finds
+// there with benchstat into the folder's BENCH_GENERATED.md. serve runs the
+// folder's build for a way, build/<way>, on :8080 until Ctrl-C: in workerd
+// for static-worker.
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -52,22 +48,13 @@ const staticTag = "structpages_static"
 var root string
 
 func main() {
-	dir := flag.String("C", "", "change to `dir` before anything else, as go -C does")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev test dynamic|static|static-worker\n"+
-			"       structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder\n"+
 			"       structpages-dev bench dynamic|static|static-worker\n"+
 			"       structpages-dev report\n"+
-			"       structpages-dev [-C dir] bench folder\n"+
-			"       structpages-dev [-C dir] serve folder dynamic|static|static-worker")
-		flag.PrintDefaults()
+			"       structpages-dev serve dynamic|static|static-worker")
 	}
 	flag.Parse()
-	if *dir != "" {
-		if err := os.Chdir(*dir); err != nil {
-			fail(err)
-		}
-	}
 	r, ok := repoRoot()
 	if !ok {
 		fail(fmt.Errorf("it runs inside the structpages repository, from its mise.toml; " +
@@ -150,13 +137,6 @@ func (f folder) hasTests() bool {
 	found := false
 	f.walk(func(path string) { found = found || strings.HasSuffix(path, "_test.go") })
 	return found
-}
-
-// servesWorkers reports whether f's module serves through workers.Serve,
-// which a TinyGo build needs to run as a Worker.
-func (f folder) servesWorkers() bool {
-	mod, err := os.ReadFile(filepath.Join(f.dir, "go.mod"))
-	return err == nil && bytes.Contains(mod, []byte("structpages/workers "))
 }
 
 // onInterrupt runs cleanup and exits if the run is interrupted (Ctrl-C).

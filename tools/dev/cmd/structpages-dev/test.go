@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"regexp"
@@ -9,33 +8,15 @@ import (
 	"strings"
 )
 
-// test is the test command. With a way, it is one step: the current folder's
-// tests run that way, then a line with how many passed, what was skipped
-// and why, and what failed. With a folder, it builds and tests the folder
-// each way, on one line. It returns the exit code.
+// test is the test command, one step: the current folder's tests one way,
+// then a line with how many passed, what was skipped and why, and what
+// failed. It returns the exit code.
 func test(args []string) int {
-	if len(args) == 1 && slices.Contains(ways, args[0]) {
-		if !testFolder(newFolder("."), args) {
-			return 1
-		}
-		return 0
-	}
-	set := flag.NewFlagSet("test", flag.ExitOnError)
-	waysFlag := set.String("ways", strings.Join(ways, ","), "the ways to build and test, in order")
-	_ = set.Parse(args)
-	if set.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: structpages-dev test [-ways dynamic,static,static-worker] folder")
+	if len(args) != 1 || !slices.Contains(ways, args[0]) {
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev test dynamic|static|static-worker")
 		return 2
 	}
-	chosen := strings.Split(*waysFlag, ",")
-	for _, w := range chosen {
-		if !slices.Contains(ways, w) {
-			fmt.Fprintf(os.Stderr, "structpages-dev: the way is dynamic, static or static-worker, not %q\n", w)
-			return 2
-		}
-	}
-	f := newFolder(set.Arg(0))
-	if !testFolder(f, chosen) {
+	if !testFolder(newFolder("."), args) {
 		return 1
 	}
 	return 0

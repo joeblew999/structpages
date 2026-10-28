@@ -176,23 +176,27 @@ passed to `ID`. [docs/static.md](./docs/static.md) says how to use it, and [docs
 build for TinyGo and Workers, and what to remove once TinyGo catches up.
 
 **Running it.** Install [mise](https://mise.jdx.dev), which brings the Go, TinyGo and tool versions in `mise.toml`;
-`mise tasks` lists everything. Some files are made from others, in an order: gsx's `.x.go` from the templates, then
-`structpages-static generate`'s `structpages_static.generated.go` from the Go code, then an example's e2e recording from its dynamic build.
-Each folder's `generate` task makes them in that order, and every task on a folder runs its `generate` task first, so
-there is no order to remember; the top of `mise.toml` sets it out. The examples' generated files are committed, as
-upstream commits `.x.go`. The other tasks run `structpages-dev` (`tools/dev`) on one folder, the same steps every way.
+`mise tasks` lists everything. Every step is a task of its own, depending on the one before, so running any task runs
+the steps it needs first, in order: for an example, `generate:gsx` (`.x.go` from the templates), then
+`generate:structpages-static` (`structpages_static.generated.go` from the Go code), then `generate:e2e` (its recorded
+answers), then `test`, `build`, `serve` and `bench`, each way. The library has the same, less what only an app has.
+Each folder's section of `mise.toml` sets its steps out; the examples' generated files are committed, as upstream
+commits `.x.go`. Where a step needs more than one plain command, `structpages-dev` (`tools/dev`, which mise builds)
+does that one step: a test summary, a benchmark, a report or a server.
 
 | Task | Runs |
 |---|---|
-| `mise run generate` / `examples:generate` / `example:todo:generate` | make a folder's generated files, in order |
-| `mise run test` | the library's tests three ways (dynamic, static, static-worker), with every test each skips |
-| `mise run examples` | every example's tests three ways, a line each |
-| `mise run example:todo:test` / `example:todo:bench` | `todo`'s tests three ways / its benchmarks three ways, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md) |
-| `mise run example:todo:serve:dynamic` / `example:todo:serve:static` / `example:todo:serve:static-worker` | serve an example on http://localhost:8080 each way (tinygo: WebAssembly in workerd; `todo` so far) |
-| `mise run bench` / `bench:examples` | benchmarks three ways: the library's into [BENCH_GENERATED.md](./BENCH_GENERATED.md), each example's into its own `BENCH_GENERATED.md` ([todo's](./examples/todo/BENCH_GENERATED.md)) |
+| `mise run test` / `test:dynamic` / `test:static` / `test:static-worker` | the library's tests, all three ways or one, a line each with every test skipped and why |
+| `mise run example:todo:test` / `example:todo:test:dynamic` / … | an example's tests, all its ways or one |
+| `mise run example:todo:serve:dynamic` / `example:todo:serve:static` / `example:todo:serve:static-worker` | serve an example's build on http://localhost:8080 (static-worker: WebAssembly in workerd) |
+| `mise run bench` / `example:todo:bench` | benchmarks, each way one at a time, compared into that folder's `BENCH_GENERATED.md` ([the library's](./BENCH_GENERATED.md), [todo's](./examples/todo/BENCH_GENERATED.md)) |
+| `mise run examples` / `bench:examples` | every example's tests / benchmarks |
 | `mise run generated:check` | fail if a generated file changed and isn't committed |
 | `mise run lint:examples` | structpages-lint (`tools/lint`) over every example |
 | `mise run ci:go` | everything CI checks on standard Go |
+
+Two examples run fewer ways, and their sections say why: html-template has no static-worker (Go's `html/template` uses
+parts of `reflect` TinyGo lacks), and lint-misuse is a fixture for the linter, not an app to serve.
 
 On standard Go, generated code comes out about even with `reflect` in the library's micro-benchmarks (faster for `ID`,
 slower for `Mount` and `URLFor`), and 23% faster serving `todo`'s page, with a fifth fewer allocations.

@@ -18,88 +18,19 @@ var (
 	benchmemArg = "-benchmem"
 )
 
-// bench is the bench command. With a way, it is one step: the current
-// folder's benchmarks that way, in-process and, for an app, its build served,
-// into build/bench/ for report to compare. With a folder, it benchmarks the
-// folder three ways and writes its BENCH_GENERATED.md.
+// bench is the bench command, one step: the current folder's benchmarks
+// one way, in-process and, for an app, its build served, into build/bench/
+// for report to compare.
 func bench(args []string) int {
-	if len(args) == 1 && slices.Contains(ways, args[0]) {
-		if err := benchOne(newFolder("."), args[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "structpages-dev: %v\n", err)
-			return 1
-		}
-		return 0
-	}
-	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: structpages-dev bench folder")
+	if len(args) != 1 || !slices.Contains(ways, args[0]) {
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev bench dynamic|static|static-worker")
 		return 2
 	}
-	f := newFolder(args[0])
-	if !hasBenchmarks(f) {
-		fmt.Fprintf(os.Stderr, "%s has no benchmarks yet: add a BenchmarkE2E to its e2e_test.go, as examples/todo has\n",
-			f.dir)
-		return 2
-	}
-	if err := benchFolder(f); err != nil {
-		fmt.Fprintf(os.Stderr, "structpages-dev: %s: %v\n", f.dir, err)
+	if err := benchOne(newFolder("."), args[0]); err != nil {
+		fmt.Fprintf(os.Stderr, "structpages-dev: %v\n", err)
 		return 1
 	}
 	return 0
-}
-
-var benchmarkFunc = regexp.MustCompile(`(?m)^func Benchmark`)
-
-// hasBenchmarks reports whether f's own package declares a benchmark.
-func hasBenchmarks(f folder) bool {
-	files, _ := filepath.Glob(filepath.Join(f.dir, "*_test.go"))
-	for _, file := range files {
-		if src, err := os.ReadFile(file); err == nil && benchmarkFunc.Match(src) {
-			return true
-		}
-	}
-	return false
-}
-
-func benchFolder(f folder) error {
-	// In-process: each way's own test binary calls the code directly.
-	inProcess := map[string]string{}
-	for _, way := range ways {
-		fmt.Printf("== %s, in-process: %s...\n", f.name, way)
-		out, err := benchWay(f, way)
-		if err != nil {
-			return err
-		}
-		inProcess[way] = out
-	}
-	result, err := benchstat(inProcess)
-	if err != nil {
-		return err
-	}
-	fmt.Println(result)
-
-	served, wasm := "(the library is no app: nothing to serve)", ""
-	if f.name != "library" {
-		served = "(not served: " + f.dir + " doesn't serve through the workers module yet)"
-		if f.servesWorkers() {
-			times := map[string]string{}
-			for _, way := range ways {
-				fmt.Printf("== %s, served: %s...\n", f.name, way)
-				out, size, serr := benchServed(f, way)
-				if serr != nil {
-					return serr
-				}
-				times[way] = out
-				if size > 0 {
-					wasm = fmt.Sprintf("%d KB of", size/1024)
-				}
-			}
-			if served, err = benchstat(times); err != nil {
-				return err
-			}
-			fmt.Println(served)
-		}
-	}
-	return writeBench(f, ways, inProcess["dynamic"], result, served, wasm)
 }
 
 // benchWay runs f's benchmarks one way, in-process.
@@ -122,30 +53,6 @@ func benchWay(f folder, way string) (string, error) {
 		out = regexp.MustCompile(`\s+0 allocs/op`).ReplaceAllString(out, "")
 	}
 	return out, nil
-}
-
-// benchServed serves f one way and times its benchmarks against it over
-// local HTTP, from one standard Go client (e2e.Bench with E2E_URL), so all
-// three ways pay the same network cost. It returns them and, for TinyGo, the
-// size of app.wasm.
-func benchServed(f folder, way string) (times string, wasm int64, err error) {
-	s, err := start(f, way, nil, true)
-	if err != nil {
-		return "", 0, err
-	}
-	defer s.stop()
-	if werr := waitUp(s, 7*time.Minute); werr != nil {
-		return "", 0, fmt.Errorf("%s, %s: %w", f.dir, way, werr)
-	}
-	args := append(append([]string{"test"}, benchFlags...), ".")
-	cmd := exec.Command("go", args...) //nolint:gosec // the go toolchain, on the folder asked
-	cmd.Dir = f.dir
-	cmd.Env = append(os.Environ(), "E2E_URL=http://"+addr)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", 0, fmt.Errorf("%s, served %s: %w\n%s", f.dir, way, err, failureLines(string(out)))
-	}
-	return string(out), s.wasm, nil
 }
 
 // benchstat compares the three ways' benchmark output, as the benchstat

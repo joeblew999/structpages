@@ -1051,8 +1051,9 @@ dir = "examples/todo"
 run = ["structpages-dev bench cloudflare", "structpages-dev report"]
 
 [tasks."example:todo:undeploy"]
-description = "todo: remove the Worker structpages-todo from Cloudflare (wrangler delete)."
+description = "todo: remove the Worker structpages-todo from Cloudflare (wrangler delete, which asks first)."
 dir = "examples/todo"
+raw = true
 run = "wrangler delete -c build/static-worker/wrangler.jsonc"
 
 [tasks."example:todo:bench"]

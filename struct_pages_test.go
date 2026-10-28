@@ -40,6 +40,7 @@ func (TestHandlerPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestHttpHandler(t *testing.T) {
+	requireMuxPatterns(t)
 	type topPage struct {
 		s TestHandlerPage  `route:"/struct Test struct handler"`
 		p *TestHandlerPage `route:"POST /pointer Test pointer handler"`
@@ -372,6 +373,7 @@ func (extendedErrHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, extr
 }
 
 func TestExtendedHandlers(t *testing.T) {
+	requireMuxPatterns(t)
 	// Test the extended handler functionality separately with proper setup
 	type pages struct {
 		extendedHandler    `route:"GET /extended"`

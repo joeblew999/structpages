@@ -540,6 +540,7 @@ func TestURLFor_withWildcardRoutes(t *testing.T) {
 
 // Test URLFor with extracted URL parameters from context
 func TestURLFor_withExtractedParams(t *testing.T) {
+	requireMuxPatterns(t)
 	// Integration test with real page tree
 	t.Run("URLFor with context params", func(t *testing.T) {
 		// Set up pages

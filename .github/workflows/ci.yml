@@ -57,6 +57,27 @@ jobs:
       - name: Run tests without method reflection
         run: go test -tags structpages_tables ./...
 
+  tinygo:
+    name: TinyGo
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Set up TinyGo
+        run: |
+          wget -q https://github.com/tinygo-org/tinygo/releases/download/v0.43.0/tinygo_0.43.0_amd64.deb
+          sudo dpkg -i tinygo_0.43.0_amd64.deb
+
+      - name: Run tests as TinyGo builds them
+        # The same script runs locally: scripts/tinygo-test.sh
+        run: scripts/tinygo-test.sh
+
   format:
     name: Format
     runs-on: ubuntu-latest

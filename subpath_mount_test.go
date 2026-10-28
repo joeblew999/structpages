@@ -29,6 +29,7 @@ func (subpathUser) Page() component { return testComponent{content: "user"} }
 // registers all routes (root + children) under that subpath and that
 // URLFor returns subpath-prefixed URLs.
 func TestMountAtSubpath(t *testing.T) {
+	requireMuxPatterns(t)
 	mux := http.NewServeMux()
 	sp, err := Mount(mux, subpathRoot{}, "/admin", "Admin")
 	if err != nil {
@@ -94,6 +95,7 @@ func TestMountAtSubpath(t *testing.T) {
 //  2. Outer router dispatches without stripping: inner mux is mounted at the
 //     subpath and sees requests with the prefix intact.
 func TestMountUnderOuterMux(t *testing.T) {
+	requireMuxPatterns(t)
 	t.Run("outer mux with StripPrefix, inner mounted at /, WithURLPrefix", func(t *testing.T) {
 		inner := http.NewServeMux()
 		sp, err := Mount(inner, subpathRoot{}, "/", "App",

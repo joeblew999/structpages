@@ -571,7 +571,13 @@ type writer struct {
 func (w *writer) printf(msg string, args ...any) { fmt.Fprintf(&w.buf, msg, args...) }
 
 func (g *gen) file(pages []pageType, funcs []*types.Func) ([]byte, error) {
-	w := &writer{g: g, reflectName: g.importName("reflect", "reflect"), tablesName: g.importName(tablesPath, "tables")}
+	w := &writer{g: g}
+	// reflect is used by function types and method tables only: a package
+	// with nothing but standalone component functions doesn't import it.
+	if len(g.funcTypes) > 0 || len(pages) > 0 {
+		w.reflectName = g.importName("reflect", "reflect")
+	}
+	w.tablesName = g.importName(tablesPath, "tables")
 	w.printf("func init() {\n")
 	w.writeFuncTypes()
 	sort.Slice(pages, func(i, j int) bool { return pages[i].obj.Name() < pages[j].obj.Name() })

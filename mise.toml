@@ -9,7 +9,8 @@
 # THE ORDER. Some files are made from others, so an example's steps run in an order, each reading what the one
 # before wrote: 1 gsx (.gsx -> .x.go), 2 gen (structpages-gen -> structpages.generated.go), 3 record (the e2e test
 # from the reflect build -> testdata/e2e.generated.txt), 4 test, bench or serve (structpages-dev). examples/todo's
-# section below has each step as its own task, each depending on the one before. The other examples' generate tasks
+# section below has each step as its own task (generate:gsx, generate:structpages-gen, generate:e2e, then test, bench,
+# serve), each depending on the one before. The other examples' generate tasks
 # do their steps 1 and 2 in order until they get todo's shape.
 #
 # What generate makes is committed for the examples, as upstream commits .x.go: commit it with the code it comes
@@ -115,28 +116,30 @@ echo "Every generated file is committed."
 
 # ---- examples/todo: its tasks, one per step, in the order they run -----------------------------------------------
 #
-# Each task depends on the one before it, so running one runs the steps before it first:
-#   1 gsx  ->  2 gen  ->  3 record  ->  4 test, bench, or serve:reflect / serve:generated / serve:tinygo
+# Each task runs in examples/todo and depends on the one before it, so running one runs the steps before it first:
+#   generate:gsx -> generate:structpages-gen -> generate:e2e -> test, bench, or serve:reflect / :generated / :tinygo
 # `mise tasks deps example:todo:test` prints the chain.
 
-[tasks."example:todo:gsx"]
-description = "examples/todo, step 1: gsx, its .gsx templates -> .x.go (committed)."
-run = "go -C examples/todo tool gsx generate -q -no-cache ."
+[tasks."example:todo:generate:gsx"]
+description = "todo: gsx makes the .x.go files."
+dir = "examples/todo"
+run = "go tool gsx generate"
 
-[tasks."example:todo:gen"]
-description = "examples/todo, step 2: structpages-gen, its Go code (.x.go included) -> structpages.generated.go (committed)."
-depends = ["example:todo:gsx"]
-run = "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}}/examples/todo -test ./..."
+[tasks."example:todo:generate:structpages-gen"]
+description = "todo: structpages-gen makes structpages.generated.go."
+depends = ["example:todo:generate:gsx"]
+dir = "examples/todo"
+run = "go tool structpages-gen"
 
-[tasks."example:todo:record"]
-description = """examples/todo, step 3: e2e, its answers built the reflect way -> testdata/e2e.generated.txt (committed: \
-review its diff)."""
-depends = ["example:todo:gen"]
-run = "E2E_UPDATE=1 go -C examples/todo test -count=1 -run TestE2E ."
+[tasks."example:todo:generate:e2e"]
+description = "todo: the e2e test records todo's answers into testdata/e2e.generated.txt."
+depends = ["example:todo:generate:structpages-gen"]
+dir = "examples/todo"
+run = "go test -update"
 
 [tasks."example:todo:generate"]
-description = "examples/todo, steps 1 to 3: gsx, gen, record."
-depends = ["example:todo:record"]
+description = "todo: all three generate tasks."
+depends = ["example:todo:generate:e2e"]
 
 [tasks."example:todo:test"]
 description = "examples/todo, step 4: build and test it three ways (reflect, generated, tinygo), a line each."

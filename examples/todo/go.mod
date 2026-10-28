@@ -14,6 +14,7 @@ require (
 	github.com/editorconfig/editorconfig-core-go/v2 v2.6.4 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/jackielii/ctxkey v1.0.1 // indirect
+	github.com/jackielii/structpages/tools/gen v0.0.0 // indirect
 	github.com/jackielii/structpages/workers v0.0.0
 	github.com/tdewolff/minify/v2 v2.24.13 // indirect
 	github.com/tdewolff/parse/v2 v2.8.13 // indirect
@@ -27,6 +28,11 @@ require (
 
 replace github.com/jackielii/structpages => ../..
 
-tool github.com/gsxhq/gsx/cmd/gsx
+tool (
+	github.com/gsxhq/gsx/cmd/gsx
+	github.com/jackielii/structpages/tools/gen/cmd/structpages-gen
+)
 
 replace github.com/jackielii/structpages/workers => ../../workers
+
+replace github.com/jackielii/structpages/tools/gen => ../../tools/gen

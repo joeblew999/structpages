@@ -25,9 +25,10 @@ func funcCall(fn reflect.Value, in []reflect.Value) []reflect.Value { return fn.
 // functions of type t. Reflect reads every function type.
 func checkFuncType(reflect.Type) error { return nil }
 
-// funcKey identifies fn's code: the same for every value of one function,
-// method expression or method value, whatever its receiver.
-func funcKey(fn reflect.Value) uintptr { return fn.Pointer() }
+// funcKey identifies fn's code, fn a function value: the same for every
+// value of one function, method expression or method value, whatever its
+// receiver.
+func funcKey(fn any) uintptr { return reflect.ValueOf(fn).Pointer() }
 
 // funcName is the runtime's name for fn's code, such as
 // "example.com/app.(*page).Content-fm", or "" when it has none.

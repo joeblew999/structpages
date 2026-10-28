@@ -15,8 +15,6 @@ import (
 	"github.com/syumai/workers-go"
 )
 
-// What tools/workers' worker.mjs gives a runtime as it starts.
-var binding = js.Global().Get("context").Get("binding")
 
 // What this runtime has served: how many requests, the allocation counter
 // after the last look, the most one request allocated since, and whether
@@ -47,6 +45,10 @@ var (
 // done before it comes. workers-go still gets the handler, so its own
 // request path works too (structpages-workers -glue workers-go).
 func Serve(h http.Handler) {
+	// What tools/workers' worker.mjs gives a runtime as it starts: looked up
+	// here, not as the package starts, so a program that only imports this
+	// package runs anywhere.
+	binding := js.Global().Get("context").Get("binding")
 	if paths := binding.Get("warm"); paths.Type() == js.TypeObject {
 		for i := range paths.Length() {
 			r, err := http.NewRequest(http.MethodGet, "http://warm.invalid"+paths.Index(i).String(), http.NoBody)

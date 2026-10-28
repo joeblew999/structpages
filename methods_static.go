@@ -57,9 +57,11 @@ func checkFuncType(t reflect.Type) error {
 	return nil
 }
 
-// funcKey identifies fn's code: the same for every value of one function,
-// method expression or method value, whatever its receiver.
-func funcKey(fn reflect.Value) uintptr { return static.Key(fn) }
+// funcKey identifies fn's code, fn a function value: the same for every
+// value of one function, method expression or method value, whatever its
+// receiver. Under TinyGo it reads the code from the interface, without the
+// copy static.Key makes, which would cost every ID an allocation.
+func funcKey(fn any) uintptr { return static.KeyOf(fn) }
 
 // funcName is the runtime's name for fn's code, such as
 // "example.com/app.(*page).Content-fm", or "" when no generated code has it.

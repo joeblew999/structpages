@@ -121,6 +121,31 @@ var patches = []patch{
 	task.MarkFinishing()
 `},
 	{"src/internal/task/task_asyncify_spare.go", "", spareStacks},
+	// Interface values compared without reflect where Go needs none: two of
+	// different types differ, and two pointers of one type are equal when
+	// they are the same pointer. TinyGo compares every pair through its
+	// reflect package, and every context.Value compares the context's keys,
+	// pointers of one type for ctxkey's, so a request makes dozens.
+	{"src/runtime/interface.go", `
+func interfaceEqual(x, y interface{}) bool {
+	return reflectValueEqual(reflectlite.ValueOf(x), reflectlite.ValueOf(y))
+}
+`, `
+func interfaceEqual(x, y interface{}) bool {
+	xt, xv := decomposeAny(x)
+	yt, yv := decomposeAny(y)
+	if xt != yt {
+		return false
+	}
+	if xt != nil {
+		switch (*reflectlite.RawType)(xt).Kind() {
+		case reflectlite.Ptr, reflectlite.Chan, reflectlite.UnsafePointer:
+			return xv == yv
+		}
+	}
+	return reflectValueEqual(reflectlite.ValueOf(x), reflectlite.ValueOf(y))
+}
+`},
 	// sync.Once's Do returns at once when its function has run, as Go's
 	// does, without the lock and the deferred unlock TinyGo's takes on
 	// every call: gsx's HTML escaping calls one for each string it writes.

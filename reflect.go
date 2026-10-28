@@ -43,7 +43,7 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 	}
 
 	// Check cache first
-	key := funcKey(v)
+	key := funcKey(methodExpr)
 	methodInfoCache.RLock()
 	cached, ok := methodInfoCache.m[key]
 	methodInfoCache.RUnlock()

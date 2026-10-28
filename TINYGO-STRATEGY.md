@@ -17,8 +17,8 @@ Go, generated is a real choice for Go users, not just a way to test TinyGo's cod
 reflection on the standard toolchain, and it must stay correct there. TinyGo has no choice: its `reflect` can't do what
 structpages needs.
 
-"The same" is measured, not assumed. For the library, `mise run parity` runs its one test suite on Go and on TinyGo
-and lists every test that passes on Go but not on TinyGo. For the examples, every example is built, tested and (see
+"The same" is measured, not assumed. For the library, its one test suite runs all three ways, and `mise run test:tinygo -v` lists
+every test TinyGo still skips, with why. For the examples, every example is built, tested and (see
 the strategy) checked all three ways. Parity is no differences left.
 
 ## How it works
@@ -38,12 +38,12 @@ all three ways, and the generated code still calls through `reflect.Value`.
 
 ## Where it stands
 
-**Library tests** (`mise run parity`):
+**Library tests** (`mise run test`, `test:generated`, `test:tinygo`):
 
 | | Passed | Skipped | Failed |
 |---|---|---|---|
-| Go | 765 | 0 | 0 |
-| TinyGo 0.43 | 731 | 14 | 0 |
+| Go | 771 | 0 | 0 |
+| TinyGo 0.43 | 737 | 14 | 0 |
 
 The 14 skips:
 
@@ -77,6 +77,24 @@ Apple M2 Pro:
 - **TinyGo vs Go, reflection: about 3.4× the time and 2–3× the bytes.** Generated costs about the same as reflection
   on Go, so this gap is TinyGo's compiler, runtime and garbage collector, not structpages. A simple GET is 2.5µs. These
   TinyGo runs are native binaries, not WebAssembly.
+- **A real page** (`mise run bench:examples`, into [BENCH-EXAMPLES.GENERATED.md](./BENCH-EXAMPLES.GENERATED.md)):
+  `todo`'s `GET /` takes 9.8µs with reflection, **7.6µs generated (23% faster, a fifth fewer allocations)**, and
+  34µs under TinyGo.
+
+**Generator gaps** (`generator_gaps_test.go`: one test per app pattern, run all three ways by the suite; reflection's
+answer is the one the other two must give):
+
+| Pattern | Result |
+|---|---|
+| request-arg provider of a **named function type** (`type P func(*http.Request) (T, error)`) | **was a gap**: worked with reflection, failed at `Mount` generated and under TinyGo. Fixed: the generator writes the named type's table |
+| provider that is a method value (`svc.CurrentUser`) | same all three ways |
+| a page's `RequestArgs` returning a function literal | same all three ways |
+| route fields of an alias type, or a pointer to a page | same all three ways |
+| `ID` of a method promoted from an embedded struct | same all three ways (an error in each: the method's receiver is no page) |
+| `Props` returning an interface; a component on a pointer receiver | same all three ways |
+| generic page types; function literals passed to `ID`/`RenderTarget.Is` | **gaps, by design**: the generator warns and skips them (3 library tests skip in generated builds) |
+
+The generator gives no warnings on any of the eight examples.
 
 ## Strategy
 
@@ -125,8 +143,8 @@ In order:
 7. **Delete the generated-code support when TinyGo catches up.** Once TinyGo's `reflect` can list and call methods
    ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and name functions
    ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)), the comment at the top of `reflect_tables.go`
-   lists what to remove, if Go, generated isn't worth keeping on its own by then. `mise run parity` with no generated
-   files is the check.
+   lists what to remove, if Go, generated isn't worth keeping on its own by then. `mise run test:tinygo` with no
+   generated files, and nothing skipped, is the check.
 
 ## Risks to keep in mind
 
@@ -141,7 +159,7 @@ In order:
 ## Checking progress
 
 ```bash
-mise run parity                   # library: what still differs between Go and TinyGo
+mise run test:tinygo -v           # library: what TinyGo still skips, and why
 mise run examples                # every example's tests three ways, as a grid
 mise run example:todo:tinygo      # serve todo as WebAssembly in workerd (and :generated, and plain)
 mise run bench:examples           # every example's pages three ways, into BENCH-EXAMPLES.GENERATED.md

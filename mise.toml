@@ -29,42 +29,9 @@ run = [
 ]
 
 [tasks."test:tinygo"]
-description = "The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job)."
+description = """The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job). With -v it shows what TinyGo \
+still skips, and why (mostly routing: tinygo-org/net#55)."""
 run = "scripts/tinygo-test.sh"
-
-[tasks.parity]
-description = """The library's tests on reflect and tinygo, listing what passes on reflect but not on tinygo: what \
-TinyGo skips (with why), fails, or never reports. Empty lists are parity."""
-shell = "bash -c"
-run = '''
-set -euo pipefail
-quiet() { "$@" 2> >(grep -v 'structpages-gen: warning' >&2); }
-# "STATUS name" per test, plus "WHY name: reason" for a SKIP: the test's first log line, printed after its
-# "=== RUN" (Go prefixes it with file:line, TinyGo doesn't).
-results() {
-  awk '/^=== RUN/ { cur = $3; next }
-       /^[[:space:]]*--- (PASS|FAIL|SKIP): / { s = $2; sub(":", "", s); print s, $3; if (s == "SKIP") print "WHY", $3 ": " why[$3]; next }
-       cur != "" && !($0 ~ /^(PASS|FAIL|ok|=== )/) && !(cur in why) { l = $0; sub(/^[[:space:]]+/, "", l); sub(/^[^ ]+\.go:[0-9]+: /, "", l); why[cur] = l }'
-}
-echo "running go..."; g=$(go test -v . ./internal/... | results)
-echo "running tinygo..."; t=$(quiet scripts/tinygo-test.sh -v | results)
-passed_go=$(awk '$1 == "PASS" { print $2 }' <<<"$g" | sort -u)
-on_tinygo() { awk -v s="$1" '$1 == s { print $2 }' <<<"$t" | sort -u; }
-echo; echo "== passes on Go, skipped on TinyGo:"
-comm -12 <(echo "$passed_go") <(on_tinygo SKIP) | while read -r n; do
-  grep -m1 "^WHY $n: " <<<"$t" | sed 's/^WHY //' || echo "$n"
-done
-echo; echo "== passes on Go, fails on TinyGo:"
-comm -12 <(echo "$passed_go") <(on_tinygo FAIL)
-echo; echo "== passes on Go, not reported by TinyGo (subtests of the skipped tests above left out):"
-skipped=$(on_tinygo SKIP)
-comm -23 <(echo "$passed_go") <(awk '{ print $2 }' <<<"$t" | sort -u) | while read -r n; do
-  under_skip=0
-  for s in $skipped; do [[ "$n" == "$s"/* ]] && under_skip=1 && break; done
-  if [[ $under_skip == 0 ]]; then echo "$n"; fi
-done
-echo; echo "go: $(grep -c . <<<"$passed_go") passed; tinygo: $(on_tinygo PASS | grep -c .) passed, $(on_tinygo SKIP | grep -c .) skipped, $(on_tinygo FAIL | grep -c .) failed"
-'''
 
 # ---- The examples: tested three ways, and served three ways -----------------------------------------------------
 #

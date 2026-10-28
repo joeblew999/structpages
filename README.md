@@ -177,7 +177,6 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 | Task | Runs |
 |---|---|
 | `mise run test` / `test:generated` / `test:tinygo` | the library's tests three ways: reflect, generated, tinygo |
-| `mise run parity` | what passes on reflect but not on tinygo, in the library |
 | `mise run examples` | every example's tests three ways, as a grid (`examples:record` re-records their checks) |
 | `mise run example:todo` / `example:todo:generated` / `example:todo:tinygo` | serve an example on http://localhost:8080 each way (tinygo: WebAssembly in workerd; `todo` so far) |
 | `mise run bench:compare` / `bench:examples` | benchmarks three ways, into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md) / [BENCH-EXAMPLES.GENERATED.md](./BENCH-EXAMPLES.GENERATED.md) |

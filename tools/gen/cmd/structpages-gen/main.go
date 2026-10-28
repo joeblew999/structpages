@@ -201,9 +201,9 @@ type gen struct {
 	routed map[string]bool
 	inTest bool
 
-	imports   map[string]string // path → name
-	names     map[string]bool   // names taken in the file
-	funcTypes map[string]*types.Signature
+	imports   map[string]string     // path → name
+	names     map[string]bool       // names taken in the file
+	funcTypes map[string]types.Type // *types.Signature, or a named function type
 	warnings  []string
 }
 
@@ -231,7 +231,7 @@ type method struct {
 func (g *gen) generate() ([]byte, error) {
 	g.imports = map[string]string{}
 	g.names = map[string]bool{}
-	g.funcTypes = map[string]*types.Signature{}
+	g.funcTypes = map[string]types.Type{}
 	for _, name := range g.pkg.Types.Scope().Names() {
 		g.names[name] = true
 	}
@@ -253,10 +253,21 @@ func (g *gen) generate() ([]byte, error) {
 		}
 	}
 	// Request-arg functions used anywhere in the covered files: literals,
-	// method values and functions from other packages.
+	// method values and functions from other packages, and values of a named
+	// function type, which keep their name: that is the type reflect sees.
 	for expr, tv := range g.pkg.TypesInfo.Types {
-		if sig, ok := tv.Type.(*types.Signature); ok && g.covered(expr.Pos()) && isRequestArg(sig) {
-			g.addFuncType(sig, expr.Pos())
+		if !g.covered(expr.Pos()) {
+			continue
+		}
+		switch t := tv.Type.(type) {
+		case *types.Signature:
+			if isRequestArg(t) {
+				g.addFuncType(t, expr.Pos())
+			}
+		case *types.Named:
+			if sig, ok := t.Underlying().(*types.Signature); ok && isRequestArg(sig) {
+				g.addNamedFuncType(t, expr.Pos())
+			}
 		}
 	}
 	for _, w := range g.warnings {
@@ -425,6 +436,15 @@ func (g *gen) addFuncType(sig *types.Signature, pos token.Pos) {
 		return
 	}
 	g.funcTypes[types.TypeString(sig, (*types.Package).Path)] = sig
+}
+
+// addNamedFuncType adds t, a named function type, under its own name.
+func (g *gen) addNamedFuncType(t *types.Named, pos token.Pos) {
+	if why := g.unnameable(t); why != "" {
+		g.warn(pos, "function type %s: %s", t.Obj().Name(), why)
+		return
+	}
+	g.funcTypes[types.TypeString(t, (*types.Package).Path)] = t
 }
 
 // unnameable says why t can't be written in the generated file, or "".
@@ -657,10 +677,12 @@ func (w *writer) writeFuncTypes() {
 	w.printf(")\n")
 }
 
-// writeFuncType writes sig's table: its types and a call that converts the
-// arguments and results as reflect.Value.Call does.
-func (w *writer) writeFuncType(sig *types.Signature) {
-	ft := w.g.typ(sig)
+// writeFuncType writes the table of t, a function type or a named one: its
+// types and a call that converts the arguments and results as
+// reflect.Value.Call does.
+func (w *writer) writeFuncType(t types.Type) {
+	sig := t.Underlying().(*types.Signature)
+	ft := w.g.typ(t)
 	params, results := sig.Params(), sig.Results()
 	w.printf("%s.FuncType{\n", w.tablesName)
 	w.printf("Type: %s.TypeFor[%s](),\n", w.reflectName, ft)

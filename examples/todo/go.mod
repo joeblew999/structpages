@@ -15,6 +15,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/jackielii/ctxkey v1.0.1 // indirect
 	github.com/jackielii/structpages/tools/static v0.0.0 // indirect
+	github.com/jackielii/structpages/tools/workers v0.0.0 // indirect
 	github.com/jackielii/structpages/workers v0.0.0
 	github.com/tdewolff/minify/v2 v2.24.13 // indirect
 	github.com/tdewolff/parse/v2 v2.8.13 // indirect
@@ -31,8 +32,11 @@ replace github.com/jackielii/structpages => ../..
 tool (
 	github.com/gsxhq/gsx/cmd/gsx
 	github.com/jackielii/structpages/tools/static/cmd/structpages-static
+	github.com/jackielii/structpages/tools/workers/cmd/structpages-workers
 )
 
 replace github.com/jackielii/structpages/workers => ../../workers
 
 replace github.com/jackielii/structpages/tools/static => ../../tools/static
+
+replace github.com/jackielii/structpages/tools/workers => ../../tools/workers

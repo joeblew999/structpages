@@ -38,18 +38,19 @@ func main() { workers.Serve(handler()) }
 Its ordinary `main` goes in a file built `!(js && wasm)`, with `http.ListenAndServe(":8080", handler())`, as
 `examples/todo`'s `main_server.go` and `main_worker.go` do. In a Worker `workers.Serve` hands the app every request,
 one Go runtime serving them all; workers-go's own `Serve` starts a new one per request, keeping nothing between them. The
-Worker also needs JavaScript glue and a workerd config next to its `app.wasm`:
+Worker also needs JavaScript glue and a workerd config next to its `app.wasm`. `structpages-workers` builds all of
+it, in the app's folder:
 
 ```bash
-go run github.com/syumai/workers-go/cmd/workers-assets-gen -mode tinygo -o build
-go run github.com/jackielii/structpages/tools/workers/cmd/structpages-workers -o build
-tinygo build -o build/app.wasm -target wasm -no-debug .
+go get -tool github.com/jackielii/structpages/tools/workers/cmd/structpages-workers@latest
+go tool structpages-workers          # into build/
 workerd serve build/config.capnp
 ```
 
-`structpages-workers` writes a `worker.mjs`, over the one `workers-assets-gen` writes, that starts one Go runtime per
-isolate, and a `config.capnp` serving on `:8080`. In this repo, `mise run example:todo:serve:static-worker` does all of that
-for `examples/todo`, in a temporary folder it deletes on Ctrl-C.
+In order, it writes workers-go's glue (`wasm_exec.js` and `runtime.mjs`, from `workers-assets-gen` at the version your
+`go.mod` requires), then its own `worker.mjs` over workers-go's, which starts one Go runtime per isolate, and a
+`config.capnp` serving on `:8080`, then `app.wasm` (`tinygo build -target wasm -no-debug`). In this repo,
+`mise run example:todo:serve:static-worker` builds `examples/todo` that way into `build/static-worker/` and serves it.
 
 ## When TinyGo catches up
 

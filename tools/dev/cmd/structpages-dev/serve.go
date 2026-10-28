@@ -48,13 +48,16 @@ func serve(args []string) int {
 
 // serveBuild runs f's build for way, build/<way>, on addr until Ctrl-C.
 func serveBuild(f folder, way string) int {
+	// What its build task made: a binary, or for static-worker a Worker's
+	// folder, served in workerd.
+	built := filepath.Join(f.abs, "build", way)
+	cmd := exec.Command(built) //nolint:gosec // the folder's own build
 	if way == "static-worker" {
-		fmt.Fprintln(os.Stderr, "structpages-dev: serve static-worker isn't one step yet: use serve folder static-worker")
-		return 2
+		cmd = exec.Command("workerd", "serve", filepath.Join(built, "config.capnp")) //nolint:gosec // its own build
+		built = filepath.Join(built, "app.wasm")
 	}
-	bin := filepath.Join(f.abs, "build", way)
-	if !fileExists(bin) {
-		fail(fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", bin, f.name, way))
+	if !fileExists(built) {
+		fail(fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", built, f.name, way))
 	}
 	if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
 		_ = c.Close()
@@ -64,7 +67,9 @@ func serveBuild(f folder, way string) int {
 	if way != "dynamic" {
 		about = ", reading this generated code instead of reflect:" + listGenerated(f)
 	}
-	cmd := exec.Command(bin) //nolint:gosec // the folder's own build
+	if info, err := os.Stat(built); err == nil && way == "static-worker" {
+		about = fmt.Sprintf(", %d KB of WebAssembly in workerd%s", info.Size()/1024, about)
+	}
 	cmd.Dir, cmd.Stdout, cmd.Stderr = f.dir, os.Stdout, os.Stderr
 	if err := cmd.Start(); err != nil {
 		fail(err)
@@ -165,9 +170,9 @@ func listGenerated(f folder) string {
 	return b.String()
 }
 
-// buildWorker builds f with TinyGo as a Worker into a temporary folder:
-// workers-go's wasm_exec.js and runtime.mjs, structpages-workers' worker.mjs
-// and config.capnp, and app.wasm. f must serve through workers.Serve.
+// buildWorker builds f with TinyGo as a Worker into a temporary folder, as
+// its build:static-worker task does into build/static-worker: with its own
+// go tool structpages-workers. f must serve through workers.Serve.
 func (s *server) buildWorker(f folder) error {
 	if !f.servesWorkers() {
 		return fmt.Errorf("%s can't run under TinyGo yet: it must serve through workers.Serve, as examples/todo does", f.dir)
@@ -177,20 +182,8 @@ func (s *server) buildWorker(f folder) error {
 		return err
 	}
 	s.tmp = tmp
-	version, err := run(f.dir, "go", "list", "-m", "-f", "{{.Version}}", "github.com/syumai/workers-go")
-	if err != nil {
-		return fmt.Errorf("go list workers-go: %w\n%s", err, version)
-	}
-	steps := [][]string{
-		{"go", "run", "github.com/syumai/workers-go/cmd/workers-assets-gen@" + strings.TrimSpace(version),
-			"-mode", "tinygo", "-o", tmp},
-		glueCommand(tmp),
-		{"tinygo", "build", "-o", filepath.Join(tmp, "app.wasm"), "-target", "wasm", "-no-debug", "."},
-	}
-	for _, step := range steps {
-		if o, rerr := run(f.dir, step[0], step[1:]...); rerr != nil {
-			return fmt.Errorf("%s: %w\n%s", strings.Join(step[:2], " "), rerr, o)
-		}
+	if o, rerr := run(f.dir, "go", "tool", "structpages-workers", "-o", tmp); rerr != nil {
+		return fmt.Errorf("structpages-workers: %w\n%s", rerr, o)
 	}
 	info, err := os.Stat(filepath.Join(tmp, "app.wasm"))
 	if err != nil {
@@ -198,12 +191,6 @@ func (s *server) buildWorker(f folder) error {
 	}
 	s.wasm = info.Size()
 	return nil
-}
-
-// glueCommand writes structpages-workers' glue into out, from this
-// repository's tools/workers.
-func glueCommand(out string) []string {
-	return []string{"go", "run", "-C", filepath.Join(root, "tools", "workers"), "./cmd/structpages-workers", "-o", out}
 }
 
 // waitUp waits for the app on addr to answer, as a build can take a while.

@@ -9,7 +9,7 @@
 //	structpages-dev test dynamic|static|static-worker
 //	structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder
 //	structpages-dev [-C dir] bench folder
-//	structpages-dev serve dynamic|static
+//	structpages-dev serve dynamic|static|static-worker
 //	structpages-dev [-C dir] serve folder dynamic|static|static-worker
 //
 // It is this repository's, run by its mise.toml, and it generates nothing:

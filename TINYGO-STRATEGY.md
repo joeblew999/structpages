@@ -140,7 +140,7 @@ In order:
    app's mux only the mount's prefix (`routes_static.go`); the dynamic build registers on the app's mux as before
    (`routes_dynamic.go`). So apps keep `http.NewServeMux()`, and generated and TinyGo differ only in their compiler.
    An app keeps its ordinary `main` and adds one built only for the Worker (`main_worker.go`, `workers.Serve`),
-   and `tools/workers` writes the Worker's JavaScript glue. `todo`'s e2e test passes all three ways, and served in workerd its toggle and delete work and its state
+   and `tools/workers`' `structpages-workers` builds the Worker, glue and all. `todo`'s e2e test passes all three ways, and served in workerd its toggle and delete work and its state
    is kept. The other examples follow when they get `todo`'s shape.
 3. **Run the TinyGo way where it will really run.** Serve each example's handler from `workerd`, locally, through
    workers-go (go-htmx4 pins workerd and TinyGo in mise for this). Then the checker can also crawl it over HTTP, and

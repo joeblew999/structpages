@@ -131,9 +131,10 @@ echo "Every generated file is committed."
 # Each task runs in examples/todo, after the tasks it depends on:
 #   generate:gsx -> generate:structpages-static -> generate:e2e
 #     -> test:dynamic, test:static, test:static-worker
-#     -> build:dynamic -> serve:dynamic
-#     -> build:static  -> serve:static
-# serve:static-worker and bench still run structpages-dev's old form, until their pieces.
+#     -> build:dynamic       -> serve:dynamic
+#     -> build:static        -> serve:static
+#     -> build:static-worker -> serve:static-worker
+# bench still runs structpages-dev's old form, until its piece.
 # Builds go in examples/todo/build/ (gitignored). `mise tasks deps example:todo:serve:static` prints a chain.
 
 [tasks."example:todo:generate:gsx"]
@@ -205,12 +206,18 @@ dir = "examples/todo"
 raw = true
 run = "structpages-dev serve static"
 
-[tasks."example:todo:serve:static-worker"]
-description = "examples/todo, step 4: serve it on :8080 until Ctrl-C, static-worker: WebAssembly in workerd."
+[tasks."example:todo:build:static-worker"]
+description = "todo: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
 depends = ["example:todo:generate"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker"
+
+[tasks."example:todo:serve:static-worker"]
+description = "todo: serve its static-worker build in workerd on :8080 until Ctrl-C."
+depends = ["example:todo:build:static-worker", "tools:dev"]
+dir = "examples/todo"
 raw = true
-quiet = true
-run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} serve examples/todo static-worker"
+run = "structpages-dev serve static-worker"
 
 [tasks."example:todo:bench"]
 description = "examples/todo, step 4: its benchmarks three ways, in-process and as served, into examples/todo/BENCH_GENERATED.md."
@@ -248,9 +255,7 @@ run = [
 
 # ---- Serving an example on http://localhost:8080 until Ctrl-C, each way --------------------------------------------
 #
-# As static-worker the app is WebAssembly in workerd, for an example that serves through workers.Serve, as todo does
-# (a TinyGo build can't listen on a socket): structpages-dev builds it into a temporary folder (workers-go's glue,
-# structpages-workers' worker.mjs and config.capnp, then tinygo build) and Ctrl-C deletes it.
+# Dynamic and static here. Only todo serves as static-worker, WebAssembly in workerd, so far: see its section.
 
 [tasks."example:blog:serve:dynamic"]
 description = "Serve examples/blog on :8080, dynamic."

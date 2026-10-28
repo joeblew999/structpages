@@ -1,7 +1,6 @@
 package main
 
 import (
-	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -195,18 +194,18 @@ component (p dashboard) Page(props dashboardData) {
 // Mock data loaders (simulating database queries).
 func loadUserStats() UserStats {
 	return UserStats{
-		ActiveUsers: 1000 + rand.IntN(500),
-		NewToday:    10 + rand.IntN(90),
+		ActiveUsers: 1000 + intN(500),
+		NewToday:    10 + intN(90),
 	}
 }
 
 func loadSalesData() SalesData {
 	points := []DataPoint{
-		{Label: "Mon", Value: 30 + rand.IntN(100)},
-		{Label: "Tue", Value: 30 + rand.IntN(100)},
-		{Label: "Wed", Value: 30 + rand.IntN(100)},
-		{Label: "Thu", Value: 30 + rand.IntN(100)},
-		{Label: "Fri", Value: 30 + rand.IntN(100)},
+		{Label: "Mon", Value: 30 + intN(100)},
+		{Label: "Tue", Value: 30 + intN(100)},
+		{Label: "Wed", Value: 30 + intN(100)},
+		{Label: "Thu", Value: 30 + intN(100)},
+		{Label: "Fri", Value: 30 + intN(100)},
 	}
 	total := 0.0
 	for _, pt := range points {
@@ -227,12 +226,12 @@ func loadNotifications() []Notification {
 		"Report generated",
 		"Backup completed",
 	}
-	count := 3 + rand.IntN(3)
+	count := 3 + intN(3)
 	notifications := make([]Notification, count)
 	for i := 0; i < count; i++ {
 		notifications[i] = Notification{
-			Message: messages[rand.IntN(len(messages))],
-			Time:    time.Now().Add(-time.Duration(rand.IntN(120)) * time.Minute),
+			Message: messages[intN(len(messages))],
+			Time:    now().Add(-time.Duration(intN(120)) * time.Minute),
 		}
 	}
 	return notifications

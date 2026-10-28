@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand/v2"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackielii/structpages"
 )
@@ -20,9 +22,20 @@ func PrintRoutes(sb *strings.Builder) structpages.MiddlewareFunc {
 	}
 }
 
-func main() {
+// intN and now make the dashboard's mock data: random, and the time.
+// e2e_test.go fixes both, so every run, and every way, answers the same.
+var (
+	intN = rand.IntN
+	now  = time.Now
+)
+
+// handler builds the app: the pages mounted on their own mux, printing its
+// routes. main serves it: main_server.go on a server, main_worker.go as a
+// Cloudflare Worker. e2e_test.go calls it directly.
+func handler() http.Handler {
 	var routes strings.Builder
-	sp, err := structpages.Mount(nil, &dashboard{}, "/", "Dashboard",
+	mux := http.NewServeMux()
+	sp, err := structpages.Mount(mux, &dashboard{}, "/", "Dashboard",
 		// htmx 2.x: route HX-Target to the page's partials.
 		structpages.WithTargetSelector(structpages.HTMXRenderTarget),
 		structpages.WithErrorHandler(errorHandler),
@@ -33,9 +46,7 @@ func main() {
 	}
 	_ = sp // sp provides URLFor and IDFor methods
 	fmt.Println("Available routes:\n", routes.String())
-	log.Println("Starting server on :8080")
-	log.Println("Visit http://localhost:8080 to see the example")
-	http.ListenAndServe(":8080", nil) // nil uses http.DefaultServeMux
+	return mux
 }
 
 func errorHandler(w http.ResponseWriter, r *http.Request, err error) {

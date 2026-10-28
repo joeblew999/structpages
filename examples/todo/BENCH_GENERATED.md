@@ -2,11 +2,11 @@
 
 # todo: benchmarks, three ways
 
-- reflect: standard Go, structpages reading methods through reflect
-- generated: standard Go, reading generated code instead (-tags structpages_static)
-- tinygo: TinyGo, which reads the generated code too
+- dynamic: standard Go, structpages finding the app's methods at run time, with reflect
+- static: standard Go, methods known at compile time from generated code (-tags structpages_static)
+- static-worker: a Cloudflare Worker, TinyGo WebAssembly, static too
 
-Commit 426ca1d, 2026-10-28T10:20Z.
+Commit 5e1c86b, 2026-10-28T13:01Z.
 go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
 6 runs of 200ms each.
 
@@ -15,34 +15,34 @@ go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
 Each way's test binary calls the code directly (TinyGo's natively, and it reports no allocs/op).
 
 ```
-         │   reflect    │             generated              │                tinygo                │
+         │   dynamic    │               static               │            static-worker             │
          │    sec/op    │   sec/op     vs base               │    sec/op     vs base                │
-E2E/GET_   10.451µ ± 8%   7.600µ ± 9%  -27.28% (p=0.002 n=6)   30.325µ ± 0%  +190.18% (p=0.002 n=6)
+E2E/GET_   10.408µ ± 8%   8.043µ ± 8%  -22.73% (p=0.002 n=6)   33.952µ ± 5%  +226.21% (p=0.002 n=6)
 
-         │   reflect    │              generated              │                tinygo                │
+         │   dynamic    │               static                │            static-worker             │
          │     B/op     │     B/op      vs base               │     B/op      vs base                │
-E2E/GET_   14.15Ki ± 0%   12.44Ki ± 0%  -12.08% (p=0.002 n=6)   31.31Ki ± 0%  +121.34% (p=0.002 n=6)
+E2E/GET_   14.15Ki ± 0%   12.44Ki ± 0%  -12.06% (p=0.002 n=6)   31.31Ki ± 0%  +121.36% (p=0.002 n=6)
 
-         │  reflect   │             generated             │
+         │  dynamic   │              static               │
          │ allocs/op  │ allocs/op   vs base               │
 E2E/GET_   169.0 ± 0%   133.0 ± 0%  -21.30% (p=0.002 n=6)
 ```
 
 ## As served
 
-Each way served on :8080 as its example:todo:serve:<way> task serves it (tinygo: 1506 KB of WebAssembly in workerd,
+Each way served on :8080 as its example:todo:serve:<way> task serves it (static-worker: 1504 KB of WebAssembly in workerd,
 what Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
 
 ```
-         │   reflect   │             generated             │                 tinygo                  │
+         │   dynamic   │              static               │              static-worker              │
          │   sec/op    │   sec/op     vs base              │     sec/op      vs base                 │
-E2E/GET_   67.24µ ± 1%   63.66µ ± 0%  -5.32% (p=0.002 n=6)   2669.26µ ± 52%  +3869.99% (p=0.002 n=6)
+E2E/GET_   71.28µ ± 1%   66.44µ ± 4%  -6.79% (p=0.002 n=6)   2660.90µ ± 52%  +3633.28% (p=0.002 n=6)
 
-         │   reflect    │           generated           │               tinygo               │
+         │   dynamic    │            static             │           static-worker            │
          │     B/op     │     B/op      vs base         │     B/op      vs base              │
-E2E/GET_   45.82Ki ± 0%   45.82Ki ± 0%  ~ (p=0.344 n=6)   45.79Ki ± 0%  -0.06% (p=0.002 n=6)
+E2E/GET_   45.82Ki ± 0%   45.82Ki ± 0%  ~ (p=0.595 n=6)   45.79Ki ± 0%  -0.07% (p=0.002 n=6)
 
-         │  reflect   │           generated           │              tinygo              │
+         │  dynamic   │            static             │          static-worker           │
          │ allocs/op  │ allocs/op   vs base           │ allocs/op   vs base              │
 E2E/GET_   79.00 ± 0%   79.00 ± 0%  ~ (p=1.000 n=6) ¹   77.00 ± 0%  -2.53% (p=0.002 n=6)
 ¹ all samples are equal

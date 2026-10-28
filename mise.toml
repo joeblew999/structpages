@@ -40,7 +40,7 @@ exit $fail
 '''
 
 [tasks._test]
-description = "The tests of <dir> (. for the library, or examples/<name>), all three ways or one."
+description = "Build and test <dir> (. for the library, or examples/<name>), all three ways or one."
 hide = true
 quiet = true
 shell = "bash -c"
@@ -53,16 +53,27 @@ d=$usage_dir; name=$([ "$d" = . ] && echo library || basename "$d"); fail=0; row
 # What this run generates goes when it ends, as it fails or not (mise run gen:examples keeps it, to look at).
 cleanup() { find "$d" \( -path "$d/examples" -o -path "$d/tools" \) -prune -o -name 'structpages*.generated*.go' -print0 | xargs -0 rm -f; }
 trap cleanup EXIT
-if [ "$d" != . ] && [ -z "$(find "$d" -name '*_test.go' -print -quit)" ]; then printf '%-16s no tests\n' "$name"; exit 0; fi
+has_tests=$(find "$d" \( -path "$d/examples" -o -path "$d/tools" \) -prune -o -name '*_test.go' -print -quit)
 gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
-if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
+# gsx output regenerated from scratch, and the committed .x.go files must match it (as CI checks).
+if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
+  (cd "$d" && go tool gsx generate -q -no-cache .)
+  if [ -n "$(git status --porcelain -- "$d" | grep '\.x\.go$')" ]; then
+    fail=1; report+=$'\n'"== $name: committed .x.go files are stale; run go tool gsx generate and commit:"$'\n'"$(git status --porcelain -- "$d" | grep '\.x\.go$')"$'\n'
+  fi
+fi
 for way in ${usage_way:-reflect generated tinygo}; do
+  # Build every package first, as CI does, then test. A library has no main package for TinyGo to build: its tests do.
   case $way in
-    reflect) cmd=(go test -race -count=1 -v ./...) ;;
-    generated) gen; cmd=(go test -count=1 -tags structpages_generated -v ./...) ;;
-    tinygo) gen -tags tinygo; cmd=(tinygo test -v ./...) ;;
+    reflect) build=(go build -o /dev/null ./...); cmd=(go test -race -count=1 -v ./...) ;;
+    generated) gen; build=(go build -tags structpages_generated -o /dev/null ./...); cmd=(go test -count=1 -tags structpages_generated -v ./...) ;;
+    tinygo) gen -tags tinygo; build=(true); [ "$d" != . ] && build=(tinygo build -o /dev/null .); cmd=(tinygo test -v ./...) ;;
     *) echo "the way is reflect, generated or tinygo, not $way" >&2; exit 2 ;;
   esac
+  if ! out=$(cd "$d" && "${build[@]}" 2>&1); then
+    row+=$(printf '%-42s' "$way: BUILD FAILED"); fail=1; report+=$'\n'"== $name, $way, build:"$'\n'"$(head -20 <<<"$out")"$'\n'; continue
+  fi
+  if [ -z "$has_tests" ]; then row+=$(printf '%-42s' "$way: builds, no tests"); continue; fi
   out=$(cd "$d" && "${cmd[@]}" 2>&1); code=$?
   # A skipped test's reason is its first log line, printed after its "=== RUN" (Go puts file:line first).
   skips=$(awk '/^=== RUN/ { cur = $3; next }
@@ -74,9 +85,9 @@ for way in ${usage_way:-reflect generated tinygo}; do
   [ "$n" -gt 0 ] && cell+=", $n skipped"
   row+=$(printf '%-42s' "$cell")
   printf -v "skips_$way" '%s' "$skips"
-  if [ $code -ne 0 ]; then fail=1; report+=$'\n'"== $name, $way:"$'\n'"$(grep -A12 -E '^[[:space:]]*--- FAIL|^panic' <<<"$out" | head -40)"$'\n'; fi
+  if [ $code -ne 0 ]; then fail=1; report+=$'\n'"== $name, $way:"$'\n'"$(grep -A12 -E '^[[:space:]]*--- FAIL|^panic|^FAIL' <<<"$out" | head -40)"$'\n'; fi
 done
-printf '%-16s %s\n' "$name" "$row"
+printf '%-20s %s\n' "$name" "$row"
 # The same skips in generated and tinygo are listed once.
 if [ -n "${skips_generated:-}" ] && [ "${skips_generated:-}" = "${skips_tinygo:-}" ]; then
   echo "  skipped in generated and tinygo:"; echo "$skips_generated"; skips_generated=""; skips_tinygo=""
@@ -87,7 +98,6 @@ done
 if [ -n "$report" ]; then echo "$report"; fi
 exit $fail
 '''
-
 [tasks."examples:record"]
 description = """Record every example's check (testdata/check.generated.txt) from reflect: the reference the other two \
 ways are compared with. Review the diff before committing it."""
@@ -98,18 +108,6 @@ for d in examples/*/; do
   (cd "$d" && CHECK_UPDATE=1 go test -count=1 -run TestCheck .) || exit 1
 done
 git status --short -- examples
-'''
-
-[tasks."test:examples"]
-description = "Every example rebuilt from fresh gsx output, built and tested, reflect (CI's Example jobs)."
-run = '''
-for d in examples/*/; do
-  echo "== $d"
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
-    (cd "$d" && go tool gsx generate -q -no-cache .) || exit 1
-  fi
-  (cd "$d" && go build -o /dev/null ./... && go test ./...) || exit 1
-done
 '''
 
 # Serving, on http://localhost:8080 until Ctrl-C: example:<name>:serve:reflect, example:<name>:serve:generated,
@@ -412,10 +410,16 @@ echo "wrote $d/BENCH_GENERATED.md"
 # ---- What upstream's CI checks, on standard Go --------------------------------------------------------------------
 
 [tasks."ci:go"]
-description = "Everything CI checks on standard Go: the library's tests (reflect), fmt, vet, lint, test:examples."
-depends = ["fmt", "vet", "lint", "test:examples"]
+description = """Everything CI checks on standard Go: fmt, vet, lint, then the library and every example built and \
+tested the reflect way, through the same _test as test and examples."""
+depends = ["fmt", "vet", "lint"]
 quiet = true
-run = "mise run _test . reflect"
+run = '''
+fail=0
+mise run _test . reflect || fail=1
+for d in examples/*/; do mise run _test "${d%/}" reflect || fail=1; done
+exit $fail
+'''
 
 [tasks.fmt]
 description = "Fail if any file needs gofmt (CI's Format job)."

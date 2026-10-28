@@ -146,3 +146,43 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and guidelines.
 ## License
 
 MIT License - see [LICENSE](./LICENSE) file for details.
+
+## TinyGo
+
+This fork's `tinygo` branch makes structpages build with [TinyGo](https://tinygo.org), so the same app that runs on
+standard Go can compile to small WebAssembly for hosts such as Cloudflare Workers.
+
+**Why it needs work.** structpages uses reflection to find a page's methods, call them, fill their parameters, and
+name the method passed to `ID`. TinyGo's `reflect` can't list or call methods
+([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)), and its `runtime.FuncForPC` returns nil
+([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)).
+
+**What we do.** Everything structpages reads about methods and functions goes through one small set of functions with
+two implementations, picked by build tag:
+
+| Build | Implementation | Methods come from |
+|---|---|---|
+| standard Go (default) | `reflect_runtime.go` | `reflect`, as before: nothing changes for Go users |
+| TinyGo, or Go with `-tags structpages_tables` | `reflect_tables.go` | tables generated ahead of time by `cmd/structpages-gen` |
+
+The same tests and benchmarks run on both, and the tables build also runs on standard Go, so a problem in the tables
+can be told apart from a TinyGo one. The goal is parity: everything that passes on standard Go passes on TinyGo. What
+is left is routing (TinyGo's `ServeMux` lacks Go 1.22 patterns, so the routing tests skip there), and what the tables
+can't describe: generic page types and function literals. The tables are a stopgap: once TinyGo's `reflect` catches
+up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, and what to remove when.
+
+**Running it.** Install [mise](https://mise.jdx.dev), which brings the Go, TinyGo and tool versions in `mise.toml`;
+`mise tasks` lists everything.
+
+| Task | Runs |
+|---|---|
+| `mise run parity` | the suite on Go and TinyGo, listing what passes on Go but not on TinyGo |
+| `mise run test` / `test:tables` / `test:tinygo` | the test suite on reflect, on the tables, and under TinyGo |
+| `mise run bench` / `bench:tables` / `bench:tinygo` | the benchmarks the same three ways |
+| `mise run bench:compare` | all three benchmark runs, compared with benchstat into [bench-compare.generated.md](./bench-compare.generated.md) |
+| `mise run ci:go` | everything CI checks on standard Go |
+
+On standard Go the tables come out about even with `reflect` overall: faster for `ID`, slower for `Mount` and `URLFor`
+(see the comparison). They are there for TinyGo, not for speed.
+
+Where this stands and what comes next: [TINYGO-STRATEGY.md](./TINYGO-STRATEGY.md).

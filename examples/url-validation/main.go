@@ -34,7 +34,11 @@ import (
 	"github.com/jackielii/structpages"
 )
 
-func main() {
+// handler builds the app: the pages mounted on their own mux, every URL they
+// link to checked first, so a dangling one fails the boot. main serves it:
+// main_server.go on a server, main_worker.go as a Cloudflare Worker.
+// e2e_test.go calls it directly.
+func handler() http.Handler {
 	mux := http.NewServeMux()
 	sp, err := structpages.Mount(mux, &root{}, "/", "url-validation demo")
 	if err != nil {
@@ -46,10 +50,7 @@ func main() {
 	if err := validateURLs(sp); err != nil {
 		log.Fatalf("URL validation failed:\n%v", err)
 	}
-	log.Println("listening on :8080  →  http://localhost:8080/")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatal(err)
-	}
+	return mux
 }
 
 // htmlResp is a minimal renderable component: structpages accepts any

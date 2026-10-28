@@ -8,7 +8,7 @@ sidebar_position: 15
 
 structpages builds with [TinyGo](https://tinygo.org), whose smaller WebAssembly suits hosts such as Cloudflare
 Workers. TinyGo's `reflect` can't list or call a type's methods, read a function's parameters, or name a function,
-so a TinyGo build reads [generated code](./generated.md) instead. Generate it first, with `-tags tinygo` when some
+so a TinyGo build reads [generated code](./static.md) instead. Generate it first, with `-tags tinygo` when some
 files build only under TinyGo, or never under it:
 
 ```bash
@@ -44,16 +44,16 @@ workerd serve build/config.capnp
 ```
 
 `structpages-workers` writes a `worker.mjs`, over the one `workers-assets-gen` writes, that starts one Go runtime per
-isolate, and a `config.capnp` serving on `:8080`. In this repo, `mise run example:todo:serve:tinygo` does all of that
+isolate, and a `config.capnp` serving on `:8080`. In this repo, `mise run example:todo:serve:static-worker` does all of that
 for `examples/todo`, in a temporary folder it deletes on Ctrl-C.
 
 ## When TinyGo catches up
 
 Two things exist for TinyGo's gaps, each with a comment saying how to remove it:
 
-- **The generated code** (`reflect_generated.go`, package `generated`, `structpages-gen`): TinyGo's `reflect` can't
+- **The generated code** (`reflect_static.go`, package `generated`, `structpages-gen`): TinyGo's `reflect` can't
   list or call methods ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and `runtime.FuncForPC`
   returns nil ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)). Once a TinyGo release has both,
-  TinyGo builds no longer need it; whether the standard toolchain's generated build stays is a choice of its own.
-- **The routing** (`routes_generated.go`, `internal/servemux`): once TinyGo's `net/http` routes Go 1.22 patterns,
+  TinyGo builds no longer need it; whether the standard toolchain's static build stays is a choice of its own.
+- **The routing** (`routes_static.go`, `internal/servemux`): once TinyGo's `net/http` routes Go 1.22 patterns,
   `Mount` can register on the app's mux in every build again.

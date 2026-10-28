@@ -40,7 +40,7 @@ jobs:
           fail_ci_if_error: false
 
   generated:
-    name: Generated build
+    name: Static build
     runs-on: ubuntu-latest
 
     steps:
@@ -55,7 +55,7 @@ jobs:
         run: go run -C tools/gen ./cmd/structpages-gen -C "$PWD" -test ./...
 
       - name: Run tests without method reflection
-        run: go test -tags structpages_generated ./...
+        run: go test -tags structpages_static ./...
 
   tinygo:
     name: TinyGo
@@ -102,7 +102,7 @@ jobs:
       - name: Run go vet
         run: |
           go vet ./...
-          go vet -tags structpages_generated ./...
+          go vet -tags structpages_static ./...
           go vet -tags tinygo ./...
           go vet -C workers ./...
           GOOS=js GOARCH=wasm go vet -C workers ./...
@@ -130,11 +130,11 @@ jobs:
           version: latest
           args: --timeout=5m
 
-      - name: golangci-lint (structpages_generated)
+      - name: golangci-lint (structpages_static)
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
-          args: --timeout=5m --build-tags structpages_generated
+          args: --timeout=5m --build-tags structpages_static
 
       - name: golangci-lint (tinygo)
         uses: golangci/golangci-lint-action@v8

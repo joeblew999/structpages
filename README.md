@@ -110,7 +110,7 @@ The full docs live at <https://jackielii.github.io/structpages/>. Good starting 
 - [URLFor & ID](https://jackielii.github.io/structpages/urlfor): type-safe URLs and element ids
 - [Dependency Injection](https://jackielii.github.io/structpages/dependency-injection), [Error Handling](https://jackielii.github.io/structpages/error-handling), [Middleware](https://jackielii.github.io/structpages/middleware)
 - [Testing](https://jackielii.github.io/structpages/testing) and [Lint](https://jackielii.github.io/structpages/lint)
-- [Generated code](./docs/generated.md): running without method reflection, on the standard toolchain or under TinyGo
+- [Generated code](./docs/static.md): running without method reflection, on the standard toolchain or under TinyGo
 - [TinyGo](https://jackielii.github.io/structpages/tinygo): building for WebAssembly hosts such as Cloudflare Workers
 - [API Guide](https://jackielii.github.io/structpages/api)
 
@@ -163,20 +163,21 @@ two implementations, picked by build tag:
 
 | Build | Implementation | Methods come from |
 |---|---|---|
-| standard Go (default) | `reflect_runtime.go` | `reflect`, as before: nothing changes for Go users |
-| TinyGo, or Go with `-tags structpages_generated` | `reflect_generated.go` | code generated ahead of time by `tools/gen` |
+| standard Go (default) | `reflect_dynamic.go` | `reflect`, at run time, as before: nothing changes for Go users |
+| TinyGo, or Go with `-tags structpages_static` | `reflect_static.go` | code generated ahead of time by `tools/gen` |
 
-So structpages runs three ways: reflect, generated (standard Go without method reflection) and TinyGo (which always
-reads the generated code). The same tests and benchmarks run all three ways, and since the generated build also runs
+So structpages runs three ways: **dynamic** (standard Go, the default: methods found at run time with `reflect`),
+**static** (standard Go, methods known at compile time from the generated code) and **static-worker** (a Cloudflare
+Worker: TinyGo WebAssembly, static too). The same tests and benchmarks run all three ways, and since the static build also runs
 on standard Go, a problem in the generated code can be told apart from a TinyGo one. The goal is parity, and the
 library's tests now pass all three ways with nothing skipped: under TinyGo `Mount` routes through its own copy of Go's
 `ServeMux`, since TinyGo's can't route Go 1.22 patterns. What generated code can't describe is a function literal
-passed to `ID`. [docs/generated.md](./docs/generated.md) says how to use it, and [docs/tinygo.md](./docs/tinygo.md) how to
+passed to `ID`. [docs/static.md](./docs/static.md) says how to use it, and [docs/tinygo.md](./docs/tinygo.md) how to
 build for TinyGo and Workers, and what to remove once TinyGo catches up.
 
 **Running it.** Install [mise](https://mise.jdx.dev), which brings the Go, TinyGo and tool versions in `mise.toml`;
 `mise tasks` lists everything. Some files are made from others, in an order: gsx's `.x.go` from the templates, then
-structpages-gen's `structpages.generated.go` from the Go code, then an example's e2e recording from its reflect build.
+structpages-gen's `structpages.generated.go` from the Go code, then an example's e2e recording from its dynamic build.
 Each folder's `generate` task makes them in that order, and every task on a folder runs its `generate` task first, so
 there is no order to remember; the top of `mise.toml` sets it out. The examples' generated files are committed, as
 upstream commits `.x.go`. The other tasks run `structpages-dev` (`tools/dev`) on one folder, the same steps every way.
@@ -184,10 +185,10 @@ upstream commits `.x.go`. The other tasks run `structpages-dev` (`tools/dev`) on
 | Task | Runs |
 |---|---|
 | `mise run generate` / `examples:generate` / `example:todo:generate` | make a folder's generated files, in order |
-| `mise run test` | the library's tests three ways (reflect, generated, tinygo), with every test each skips |
+| `mise run test` | the library's tests three ways (dynamic, static, static-worker), with every test each skips |
 | `mise run examples` | every example's tests three ways, a line each |
 | `mise run example:todo:test` / `example:todo:bench` | `todo`'s tests three ways / its benchmarks three ways, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md) |
-| `mise run example:todo:serve:reflect` / `example:todo:serve:generated` / `example:todo:serve:tinygo` | serve an example on http://localhost:8080 each way (tinygo: WebAssembly in workerd; `todo` so far) |
+| `mise run example:todo:serve:dynamic` / `example:todo:serve:static` / `example:todo:serve:static-worker` | serve an example on http://localhost:8080 each way (tinygo: WebAssembly in workerd; `todo` so far) |
 | `mise run bench` / `bench:examples` | benchmarks three ways: the library's into [BENCH_GENERATED.md](./BENCH_GENERATED.md), each example's into its own `BENCH_GENERATED.md` ([todo's](./examples/todo/BENCH_GENERATED.md)) |
 | `mise run generated:check` | fail if a generated file changed and isn't committed |
 | `mise run lint:examples` | structpages-lint (`tools/lint`) over every example |

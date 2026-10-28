@@ -46,7 +46,7 @@ examples/htmx-render-target/htmx-render-target-example
 examples/lint-misuse/lint-misuse
 
 # Code structpages-gen writes (named *.generated*.go) for this repo's own
-# tests (mise run generate; CI's Generated build). The examples' is
+# tests (mise run generate; CI's Static build). The examples' is
 # committed instead, as their gsx output is.
 /structpages*.generated*.go
 /internal/*/structpages*.generated*.go

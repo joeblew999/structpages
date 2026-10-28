@@ -20,7 +20,7 @@ const addr = "localhost:8080"
 // serve is the serve command: one app served one way on addr until Ctrl-C.
 func serve(args []string) int {
 	if len(args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: structpages-dev serve folder reflect|generated|tinygo")
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev serve folder dynamic|static|static-worker")
 		return 2
 	}
 	f, way := newFolder(args[0]), args[1]
@@ -73,18 +73,18 @@ func start(f folder, way string, out io.Writer, direct bool) (*server, error) {
 	}
 	var tags []string
 	switch way {
-	case "reflect", "tinygo":
-	case "generated":
-		tags = []string{"-tags", generatedTag}
+	case "dynamic", "static-worker":
+	case "static":
+		tags = []string{"-tags", staticTag}
 	default:
-		return nil, fmt.Errorf("the way is reflect, generated or tinygo, not %q", way)
+		return nil, fmt.Errorf("the way is dynamic, static or static-worker, not %q", way)
 	}
 	s := &server{done: make(chan error, 1)}
-	if way != "reflect" {
+	if way != "dynamic" {
 		s.about = ", reading this generated code instead of reflect:" + listGenerated(f)
 	}
 	switch {
-	case way == "tinygo":
+	case way == "static-worker":
 		if err := s.buildWorker(f); err != nil {
 			return nil, err
 		}

@@ -1,13 +1,13 @@
 // Package generated holds what structpages reads about an app's functions
-// and methods in its generated builds, in place of method reflection: under
+// and methods in its static builds, in place of method reflection: under
 // TinyGo, whose reflect can't list or call a type's methods, read a function
 // type's parameters and results, or name a function, and on the standard
-// toolchain with the structpages_generated build tag.
+// toolchain with the structpages_static build tag.
 //
 // structpages-gen writes a file into each package with pages
 // (structpages.generated.go) that fills it in at init, and structpages reads
 // it there instead of reflect. Nothing here is meant to be written by hand;
-// see the docs on generated code, and structpages' reflect_generated.go for
+// see the docs on generated code, and structpages' reflect_static.go for
 // when TinyGo needs it no more.
 //
 // Every Add function is for init functions: what they add is read without

@@ -1,4 +1,4 @@
-//go:build tinygo || structpages_generated
+//go:build tinygo || structpages_static
 
 package structpages
 
@@ -17,7 +17,7 @@ import (
 // https://github.com/tinygo-org/net/pull/56, is open). So a TinyGo build
 // registers a mount's routes on internal/servemux, Go 1.26's ServeMux, and
 // hands mux the mount's path with patterns a Go 1.21 mux reads as Go 1.22's
-// does. The structpages_generated build does the same on the standard
+// does. The structpages_static build does the same on the standard
 // toolchain, so it runs TinyGo's code path in full and only the compiler
 // differs between the two.
 //
@@ -28,7 +28,7 @@ import (
 // /), and a route mux would reject as a conflict isn't one.
 //
 // When a TinyGo release ships Go 1.22's ServeMux, delete this file and
-// internal/servemux, and drop the build constraint from routes_go.go, so
+// internal/servemux, and drop the build constraint from routes_dynamic.go, so
 // Mount registers on mux directly again. It is safe when the suite passes
 // under `tinygo test` without them: TestMountAtSubpath,
 // TestMountUnderOuterMux, TestMiddlewareWithHTTPMethods and

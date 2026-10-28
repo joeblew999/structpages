@@ -16,13 +16,13 @@ func test(args []string) int {
 	waysFlag := set.String("ways", strings.Join(ways, ","), "the ways to build and test, in order")
 	_ = set.Parse(args)
 	if set.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: structpages-dev test [-ways reflect,generated,tinygo] folder")
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev test [-ways dynamic,static,static-worker] folder")
 		return 2
 	}
 	chosen := strings.Split(*waysFlag, ",")
 	for _, w := range chosen {
 		if !slices.Contains(ways, w) {
-			fmt.Fprintf(os.Stderr, "structpages-dev: the way is reflect, generated or tinygo, not %q\n", w)
+			fmt.Fprintf(os.Stderr, "structpages-dev: the way is dynamic, static or static-worker, not %q\n", w)
 			return 2
 		}
 	}
@@ -90,20 +90,20 @@ func testFolder(f folder, chosen []string) bool {
 	return ok
 }
 
-// printSkips lists each way's skipped tests, the generated and tinygo ways'
+// printSkips lists each way's skipped tests, the static and static-worker ways'
 // once when they are the same.
 func printSkips(results []result) {
 	by := map[string][]string{}
 	for _, r := range results {
 		by[r.way] = r.skips
 	}
-	if len(by["generated"]) > 0 && slices.Equal(by["generated"], by["tinygo"]) {
-		fmt.Println("  skipped in generated and tinygo:")
-		for _, s := range by["generated"] {
+	if len(by["static"]) > 0 && slices.Equal(by["static"], by["static-worker"]) {
+		fmt.Println("  skipped in static and static-worker:")
+		for _, s := range by["static"] {
 			fmt.Println("  " + s)
 		}
-		delete(by, "generated")
-		delete(by, "tinygo")
+		delete(by, "static")
+		delete(by, "static-worker")
 	}
 	for _, way := range ways {
 		if len(by[way]) > 0 {
@@ -121,13 +121,13 @@ func testWay(f folder, way string, tests bool) result {
 	r := result{way: way}
 	var build, testCmd []string
 	switch way {
-	case "reflect":
+	case "dynamic":
 		build = []string{"go", "build", "-o", os.DevNull, "./..."}
 		testCmd = []string{"go", "test", "-race", "-count=1", "-v", "./..."}
-	case "generated":
-		build = []string{"go", "build", "-tags", generatedTag, "-o", os.DevNull, "./..."}
-		testCmd = []string{"go", "test", "-race", "-count=1", "-tags", generatedTag, "-v", "./..."}
-	case "tinygo":
+	case "static":
+		build = []string{"go", "build", "-tags", staticTag, "-o", os.DevNull, "./..."}
+		testCmd = []string{"go", "test", "-race", "-count=1", "-tags", staticTag, "-v", "./..."}
+	case "static-worker":
 		// A library has no main package for TinyGo to build; its tests build it.
 		if f.name != "library" {
 			build = []string{"tinygo", "build", "-o", os.DevNull, "."}

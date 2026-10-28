@@ -439,7 +439,7 @@ func (p *pageWithInitPanic) Init() {
 }
 
 // pageWithInitNeedsArg's Init needs an argument nothing provides. It is
-// declared here, not inside the test, so the generated builds have its
+// declared here, not inside the test, so the static builds have its
 // method too.
 type pageWithInitNeedsArg struct{}
 type initNeeder interface{ NeedThis() }

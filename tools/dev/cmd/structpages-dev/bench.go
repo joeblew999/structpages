@@ -89,7 +89,7 @@ func benchFolder(f folder) error {
 			fmt.Println(served)
 		}
 	}
-	return writeBench(f, inProcess["reflect"], result, served, wasm)
+	return writeBench(f, inProcess["dynamic"], result, served, wasm)
 }
 
 // benchWay runs f's benchmarks one way, in-process.
@@ -98,16 +98,16 @@ func benchWay(f folder, way string) (string, error) {
 	args = append(args, benchmemArg)
 	tool := "go"
 	switch way {
-	case "generated":
-		args = append(args, "-tags", generatedTag)
-	case "tinygo":
+	case "static":
+		args = append(args, "-tags", staticTag)
+	case "static-worker":
 		tool = "tinygo"
 	}
 	out, err := run(f.dir, tool, append(args, ".")...)
 	if err != nil {
 		return "", fmt.Errorf("%s benchmarks, %s: %w\n%s", f.name, way, err, failureLines(out))
 	}
-	if way == "tinygo" {
+	if way == "static-worker" {
 		// TinyGo prints 0 for every allocs/op: left out.
 		out = regexp.MustCompile(`\s+0 allocs/op`).ReplaceAllString(out, "")
 	}
@@ -162,14 +162,14 @@ func benchstat(outs map[string]string) (string, error) {
 }
 
 // writeBench writes f's BENCH_GENERATED.md.
-func writeBench(f folder, reflect, inProcess, served, wasm string) error {
+func writeBench(f folder, dynamic, inProcess, served, wasm string) error {
 	file := filepath.Join(f.dir, "BENCH_GENERATED.md")
 	task := "bench"
 	if f.name != "library" {
 		task = "example:" + f.name + ":bench"
 	}
 	cpu := ""
-	if m := regexp.MustCompile(`(?m)^cpu: (.*)$`).FindStringSubmatch(reflect); len(m) == 2 {
+	if m := regexp.MustCompile(`(?m)^cpu: (.*)$`).FindStringSubmatch(dynamic); len(m) == 2 {
 		cpu = ", " + m[1]
 	}
 	if wasm == "" {
@@ -179,9 +179,9 @@ func writeBench(f folder, reflect, inProcess, served, wasm string) error {
 
 # %s: benchmarks, three ways
 
-- reflect: standard Go, structpages reading methods through reflect
-- generated: standard Go, reading generated code instead (-tags structpages_generated)
-- tinygo: TinyGo, which reads the generated code too
+- dynamic: standard Go, structpages finding the app's methods at run time, with reflect
+- static: standard Go, the methods known at compile time, from structpages-gen's code (-tags structpages_static)
+- static-worker: a Cloudflare Worker, TinyGo WebAssembly, static too
 
 %s
 %s, %s%s, workerd %s.
@@ -197,7 +197,7 @@ Each way's test binary calls the code directly (TinyGo's natively, and it report
 
 ## As served
 
-Each way served on :8080 as its example:%s:serve:<way> task serves it (tinygo: %s WebAssembly in workerd,
+Each way served on :8080 as its example:%s:serve:<way> task serves it (static-worker: %s WebAssembly in workerd,
 what Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
 
 `+"```"+`

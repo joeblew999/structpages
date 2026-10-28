@@ -691,7 +691,7 @@ func (idForUnregisteredPage) SomeMethod() component {
 // reflect sees a function without a receiver, and generated code has no name
 // for a function literal at all.
 func noReceiverError() string {
-	if generatedBuild {
+	if staticBuild {
 		return "cannot get function info"
 	}
 	return "failed to extract receiver type"

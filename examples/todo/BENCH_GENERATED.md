@@ -3,7 +3,7 @@
 # todo: benchmarks, three ways
 
 - reflect: standard Go, structpages reading methods through reflect
-- generated: standard Go, reading generated code instead (-tags structpages_generated)
+- generated: standard Go, reading generated code instead (-tags structpages_static)
 - tinygo: TinyGo, which reads the generated code too
 
 Commit 426ca1d, 2026-10-28T10:20Z.

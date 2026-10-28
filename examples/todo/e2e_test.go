@@ -7,8 +7,8 @@ import (
 )
 
 // TestE2E crawls the app from / and compares every response with
-// testdata/e2e.generated.txt, recorded from the reflection build, so the app
-// must answer the same with reflect, generated code and TinyGo
+// testdata/e2e.generated.txt, recorded from the dynamic build, so the app
+// must answer the same all three ways: dynamic, static and static-worker
 // (mise run example:todo:test).
 func TestE2E(t *testing.T) { e2e.Crawl(t, handler(), "testdata/e2e.generated.txt") }
 

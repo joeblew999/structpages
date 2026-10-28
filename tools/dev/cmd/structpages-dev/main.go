@@ -1,20 +1,21 @@
 // Command structpages-dev builds, tests, benchmarks and serves one folder of
 // this repository (the structpages library, ., or an example, such as
-// examples/todo) the three ways structpages runs: reflect (the standard
-// build), generated (the standard toolchain with -tags structpages_generated,
-// reading the code structpages-gen writes instead of method reflection) and
-// tinygo (which always reads that code):
+// examples/todo) the three ways structpages runs: dynamic (the standard
+// build, finding the app's methods at run time with reflect), static (the
+// standard toolchain with -tags structpages_static, reading the code
+// structpages-gen writes instead) and static-worker (a Cloudflare Worker,
+// TinyGo WebAssembly, which always reads that code):
 //
-//	structpages-dev [-C dir] test [-ways reflect,generated,tinygo] folder
+//	structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder
 //	structpages-dev [-C dir] bench folder
-//	structpages-dev [-C dir] serve folder reflect|generated|tinygo
+//	structpages-dev [-C dir] serve folder dynamic|static|static-worker
 //
 // It is this repository's, run by its mise.toml, and it generates nothing:
 // each folder's generate task there makes the folder's generated files first,
 // in order, and the tasks running structpages-dev depend on it. Which folders
 // to run it on is mise.toml's to say too. An app outside this repository uses
 // the pieces directly: structpages-gen, the e2e package, workers and
-// structpages-workers (docs/generated.md, docs/tinygo.md).
+// structpages-workers (docs/static.md, docs/tinygo.md).
 //
 // test builds every package and runs the tests each way (with the race
 // detector, which TinyGo lacks), and prints a line: how many passed each way,
@@ -39,9 +40,9 @@ import (
 )
 
 // ways are the three ways, in the order they run and print.
-var ways = []string{"reflect", "generated", "tinygo"}
+var ways = []string{"dynamic", "static", "static-worker"}
 
-const generatedTag = "structpages_generated"
+const staticTag = "structpages_static"
 
 // root is the repository's root folder, the one with tools/gen.
 var root string
@@ -49,9 +50,9 @@ var root string
 func main() {
 	dir := flag.String("C", "", "change to `dir` before anything else, as go -C does")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: structpages-dev [-C dir] test [-ways reflect,generated,tinygo] folder\n"+
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder\n"+
 			"       structpages-dev [-C dir] bench folder\n"+
-			"       structpages-dev [-C dir] serve folder reflect|generated|tinygo")
+			"       structpages-dev [-C dir] serve folder dynamic|static|static-worker")
 		flag.PrintDefaults()
 	}
 	flag.Parse()

@@ -494,7 +494,7 @@ reference.md §Lint lists the categories, the gsx specifics and the suppression 
 
 structpages finds a page's methods, fills their parameters and resolves `ID(ctx, p.Content)` through method
 reflection. With generated code instead, it runs without it: on the standard toolchain with `-tags
-structpages_generated` (on `todo`'s page about a fifth faster), and under TinyGo, whose `reflect` can't list or
+structpages_static` (on `todo`'s page about a fifth faster), and under TinyGo, whose `reflect` can't list or
 call methods or name a function. `structpages-gen` generates it; pages don't change.
 
 ```shell
@@ -510,14 +510,14 @@ go tool structpages-gen -tags tinygo ./... # when some files build only under Ti
   for app.page; run go tool structpages-gen`. Code from before a method was added misses that method until the
   page uses it, then fails. Either way: regenerate, not edit.
 - Generate with the build's own tags: code written for one set of files doesn't compile against another.
-  `-test` adds what `_test.go` files declare, for `go test -tags structpages_generated` or `tinygo test`.
+  `-test` adds what `_test.go` files declare, for `go test -tags structpages_static` or `tinygo test`.
 - Never edit `structpages.generated.go`. Commit it like gsx's `.x.go`, or generate it in the build.
 - A generic page type gets code for each instantiation the app uses (`listPage[string]` in a route); one used
   only inside generic code gets none, and a warning.
 - Function literals can't be named by generated code: pass `ID` and `RenderTarget.Is` declared methods or
   functions.
-- Routing needs nothing: in the generated builds `Mount` routes through its own copy of Go's `ServeMux` (TinyGo's
-  lacks Go 1.22 patterns), handing your mux only the mount's prefix. See docs/generated.md, and docs/tinygo.md for Workers.
+- Routing needs nothing: in the static builds `Mount` routes through its own copy of Go's `ServeMux` (TinyGo's
+  lacks Go 1.22 patterns), handing your mux only the mount's prefix. See docs/static.md, and docs/tinygo.md for Workers.
 ## Key rules
 
 1. Read path params with `r.PathValue("itemId")`.

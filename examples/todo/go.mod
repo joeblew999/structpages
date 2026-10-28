@@ -30,7 +30,7 @@ replace github.com/jackielii/structpages => ../..
 
 tool (
 	github.com/gsxhq/gsx/cmd/gsx
-	github.com/jackielii/structpages/tools/gen/cmd/structpages-gen
+	github.com/jackielii/structpages/tools/gen/cmd/structpages
 )
 
 replace github.com/jackielii/structpages/workers => ../../workers

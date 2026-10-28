@@ -52,7 +52,7 @@ jobs:
           go-version: "1.25"
 
       - name: Generate the code
-        run: go run -C tools/gen ./cmd/structpages-gen -C "$PWD" -test ./...
+        run: go run -C tools/gen ./cmd/structpages generate -C "$PWD" -test ./...
 
       - name: Run tests without method reflection
         run: go test -tags structpages_static ./...
@@ -224,7 +224,7 @@ jobs:
       - name: Generate structpages code and check freshness
         working-directory: ./examples/${{ matrix.example }}
         run: |
-          go run -C ../../tools/gen ./cmd/structpages-gen -C "$PWD" -test ./...
+          go run -C ../../tools/gen ./cmd/structpages generate -C "$PWD" -test ./...
           if [ -n "$(git status --porcelain .)" ]; then
             echo "::error::committed structpages.generated.go files are stale — run mise run example:${{ matrix.example }}:generate and commit"
             git status --porcelain .

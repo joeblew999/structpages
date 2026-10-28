@@ -6,7 +6,7 @@ description: >
   partials, HTMX partial rendering and nested swap levels, URL and element-id generation (the gsx
   `url`/`id`/`target` filters, URLFor/ID/IDTarget), RenderTarget/RenderComponent patterns, middleware or
   dependency injection with structpages, running and reading structpages-lint, or running without method
-  reflection or under TinyGo (structpages-gen). Also use when the user asks
+  reflection or under TinyGo (structpages generate). Also use when the user asks
   about structpages patterns, conventions, vocabulary, or debugging structpages issues. Covers templ and
   html/template users too.
 ---
@@ -495,19 +495,19 @@ reference.md §Lint lists the categories, the gsx specifics and the suppression 
 structpages finds a page's methods, fills their parameters and resolves `ID(ctx, p.Content)` through method
 reflection. With generated code instead, it runs without it: on the standard toolchain with `-tags
 structpages_static` (on `todo`'s page about a fifth faster), and under TinyGo, whose `reflect` can't list or
-call methods or name a function. `structpages-gen` generates it; pages don't change.
+call methods or name a function. `structpages generate` generates it; pages don't change.
 
 ```shell
-go get -tool github.com/jackielii/structpages/tools/gen/cmd/structpages-gen@latest
-go tool structpages-gen ./...              # writes structpages.generated.go in each package with pages
-go tool structpages-gen -tags tinygo ./... # when some files build only under TinyGo, or never under it
+go get -tool github.com/jackielii/structpages/tools/gen/cmd/structpages@latest
+go tool structpages generate ./...              # writes structpages.generated.go in each package with pages
+go tool structpages generate -tags tinygo ./... # when some files build only under TinyGo, or never under it
 ```
 
 - Run it after `go tool gsx generate`: page components are methods in the generated `.x.go`. Record an e2e
   test after both.
 - Run it again whenever a page's methods, a `Props` or handler signature, a request-arg provider or a
   standalone component changes. Missing generated code fails at `Mount`, naming the type: `no generated methods
-  for app.page; run go tool structpages-gen`. Code from before a method was added misses that method until the
+  for app.page; run go tool structpages generate`. Code from before a method was added misses that method until the
   page uses it, then fails. Either way: regenerate, not edit.
 - Generate with the build's own tags: code written for one set of files doesn't compile against another.
   `-test` adds what `_test.go` files declare, for `go test -tags structpages_static` or `tinygo test`.
@@ -539,5 +539,5 @@ go tool structpages-gen -tags tinygo ./... # when some files build only under Ti
     `WithTargetSelector(HTMXv4RenderTarget)` (htmx 4). Without it every request renders `Page`.
 11. Run `structpages-lint ./...` in CI and after every route or page rename; fix findings, don't suppress
     them.
-12. Under TinyGo, rerun `structpages-gen` (with the build's tags) after any change to a page's methods or
+12. Under TinyGo, rerun `structpages generate` (with the build's tags) after any change to a page's methods or
     signatures, and after `gsx generate`.

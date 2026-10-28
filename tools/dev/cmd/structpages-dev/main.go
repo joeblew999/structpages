@@ -3,7 +3,7 @@
 // examples/todo) the three ways structpages runs: dynamic (the standard
 // build, finding the app's methods at run time with reflect), static (the
 // standard toolchain with -tags structpages_static, reading the code
-// structpages-gen writes instead) and static-worker (a Cloudflare Worker,
+// structpages generate writes instead) and static-worker (a Cloudflare Worker,
 // TinyGo WebAssembly, which always reads that code):
 //
 //	structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder
@@ -14,7 +14,7 @@
 // each folder's generate task there makes the folder's generated files first,
 // in order, and the tasks running structpages-dev depend on it. Which folders
 // to run it on is mise.toml's to say too. An app outside this repository uses
-// the pieces directly: structpages-gen, the e2e package, workers and
+// the pieces directly: structpages generate, the e2e package, workers and
 // structpages-workers (docs/static.md, docs/tinygo.md).
 //
 // test builds every package and runs the tests each way (with the race
@@ -64,7 +64,7 @@ func main() {
 	r, ok := repoRoot()
 	if !ok {
 		fail(fmt.Errorf("it runs inside the structpages repository, from its mise.toml; " +
-			"an app of your own uses structpages-gen and the e2e package directly"))
+			"an app of your own uses structpages generate and the e2e package directly"))
 	}
 	root = r
 	if flag.NArg() == 0 {

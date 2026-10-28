@@ -12,7 +12,7 @@ import (
 )
 
 // What structpages reads about functions and methods comes from the code
-// structpages-gen writes (package generated), because TinyGo can't: its reflect
+// structpages generate writes (package generated), because TinyGo can't: its reflect
 // panics as unimplemented in Type.Method, MethodByName, In, Out and
 // Value.Call (https://github.com/tinygo-org/tinygo/issues/3862), and its
 // runtime.FuncForPC returns nil
@@ -32,7 +32,7 @@ import (
 func funcTable(t reflect.Type) *generated.FuncType {
 	ft, ok := generated.LookupFuncType(t)
 	if !ok {
-		panic(fmt.Sprintf("structpages: no generated code for function type %s; run go tool structpages-gen", t))
+		panic(fmt.Sprintf("structpages: no generated code for function type %s; run go tool structpages generate", t))
 	}
 	return ft
 }
@@ -49,10 +49,10 @@ func funcCall(fn reflect.Value, in []reflect.Value) []reflect.Value {
 }
 
 // checkFuncType reports whether funcIn, funcOut and funcCall work for
-// functions of type t: whether structpages-gen wrote code for it.
+// functions of type t: whether structpages generate wrote code for it.
 func checkFuncType(t reflect.Type) error {
 	if _, ok := generated.LookupFuncType(t); !ok {
-		return fmt.Errorf("no generated code for function type %s; run go tool structpages-gen", t)
+		return fmt.Errorf("no generated code for function type %s; run go tool structpages generate", t)
 	}
 	return nil
 }
@@ -72,7 +72,7 @@ func typeMethods(t reflect.Type) ([]reflect.Method, error) {
 		if embedded, ok := embeddedMethods(t); ok {
 			return embedded, nil
 		}
-		return nil, fmt.Errorf("no generated methods for %s; run go tool structpages-gen", t)
+		return nil, fmt.Errorf("no generated methods for %s; run go tool structpages generate", t)
 	}
 	for _, m := range ms {
 		// structpages never calls a promoted method, and the generator

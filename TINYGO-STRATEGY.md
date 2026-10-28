@@ -10,7 +10,7 @@ A structpages app runs **three ways**, and behaves the same in each:
 | Way | Toolchain | How structpages reads the app's methods |
 |---|---|---|
 | **dynamic** | standard Go | `reflect`, at run time, as upstream always has (the default) |
-| **static** | standard Go, `-tags structpages_static` | code that `structpages-gen` generates from the app's source |
+| **static** | standard Go, `-tags structpages_static` | code that `structpages generate` generates from the app's source |
 | **static-worker** | TinyGo, a Cloudflare Worker (WebAssembly) | the same generated code |
 
 Static is a real choice for Go users, not just a way to test TinyGo's code path: an app can run without method
@@ -29,7 +29,7 @@ needs all four, so everything it reads about methods and functions goes through 
 implementations, picked by build tag:
 
 - `reflect_dynamic.go` (dynamic): `reflect`, exactly as before.
-- `reflect_static.go` (static and static-worker): what `structpages-gen` (`tools/gen`) generates. It writes
+- `reflect_static.go` (static and static-worker): what `structpages generate` (`tools/gen`) generates. It writes
   `structpages.generated.go` into each package with pages, next to the pages: generated code can only name a
   package's unexported types from inside that package, as with gsx's `.x.go`. The files only build with the tag or
   under TinyGo, so the dynamic build ignores them whether they exist or not.

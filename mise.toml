@@ -3,13 +3,13 @@
 #
 # structpages runs three ways, and most tasks come in threes:
 #   dynamic        standard Go, the default: structpages finds the app's methods at run time, with reflect
-#   static         standard Go, -tags structpages_static: they are known at compile time, from structpages-gen's code
+#   static         standard Go, -tags structpages_static: they are known at compile time, from the code `structpages generate` writes
 #   static-worker  a Cloudflare Worker: TinyGo WebAssembly, static too
 #
 # THE ORDER. Some files are made from others, so an example's steps run in an order, each reading what the one
-# before wrote: 1 gsx (.gsx -> .x.go), 2 gen (structpages-gen -> structpages.generated.go), 3 record (the e2e test
+# before wrote: 1 gsx (.gsx -> .x.go), 2 structpages (structpages generate -> structpages.generated.go), 3 record (the e2e test
 # from the dynamic build -> testdata/e2e.generated.txt), 4 test, bench or serve (structpages-dev). examples/todo's
-# section below has each step as its own task (generate:gsx, generate:structpages-gen, generate:e2e, then test, bench,
+# section below has each step as its own task (generate:gsx, generate:structpages, generate:e2e, then test, bench,
 # serve), each depending on the one before. The other examples' generate tasks
 # do their steps 1 and 2 in order until they get todo's shape.
 #
@@ -29,8 +29,8 @@ golangci-lint = "2"
 [vars]
 # structpages-dev from this repository, working in its root; the folder and what to do follow.
 dev = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}}"
-# structpages-gen from this repository (step 2); -C, the folder, follows.
-gen = "go run -C tools/gen ./cmd/structpages-gen"
+# structpages generate from this repository (step 2); -C, the folder, follows.
+gen = "go run -C tools/gen ./cmd/structpages generate"
 
 # ---- Generate: each folder's generated files, in THE ORDER above ---------------------------------------------------
 
@@ -117,7 +117,7 @@ echo "Every generated file is committed."
 # ---- examples/todo: its tasks, one per step, in the order they run -----------------------------------------------
 #
 # Each task runs in examples/todo and depends on the one before it, so running one runs the steps before it first:
-#   generate:gsx -> generate:structpages-gen -> generate:e2e -> test, bench, or serve:dynamic / :static / :static-worker
+#   generate:gsx -> generate:structpages -> generate:e2e -> test, bench, or serve:dynamic / :static / :static-worker
 # `mise tasks deps example:todo:test` prints the chain.
 
 [tasks."example:todo:generate:gsx"]
@@ -125,15 +125,15 @@ description = "todo: gsx makes the .x.go files."
 dir = "examples/todo"
 run = "go tool gsx generate"
 
-[tasks."example:todo:generate:structpages-gen"]
-description = "todo: structpages-gen makes structpages.generated.go."
+[tasks."example:todo:generate:structpages"]
+description = "todo: structpages generate makes structpages.generated.go."
 depends = ["example:todo:generate:gsx"]
 dir = "examples/todo"
-run = "go tool structpages-gen"
+run = "go tool structpages generate"
 
 [tasks."example:todo:generate:e2e"]
 description = "todo: the e2e test records todo's answers into testdata/e2e.generated.txt."
-depends = ["example:todo:generate:structpages-gen"]
+depends = ["example:todo:generate:structpages"]
 dir = "examples/todo"
 run = "go test -update"
 

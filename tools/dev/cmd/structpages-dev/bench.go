@@ -180,7 +180,7 @@ func writeBench(f folder, dynamic, inProcess, served, wasm string) error {
 # %s: benchmarks, three ways
 
 - dynamic: standard Go, structpages finding the app's methods at run time, with reflect
-- static: standard Go, the methods known at compile time, from structpages-gen's code (-tags structpages_static)
+- static: standard Go, methods known at compile time from generated code (-tags structpages_static)
 - static-worker: a Cloudflare Worker, TinyGo WebAssembly, static too
 
 %s

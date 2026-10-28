@@ -125,6 +125,51 @@ for d in examples/*/; do
 done
 '''
 
+# One task per example app, serving it on http://localhost:8080 until Ctrl-C. gsx examples regenerate their
+# .x.go first, so edits to .gsx files show up. (lint-misuse is a linter fixture: it never serves.)
+
+[tasks."example:blog"]
+description = "Serve examples/blog on http://localhost:8080 (Ctrl-C stops it)."
+dir = "examples/blog"
+raw = true
+run = ["go tool gsx generate -q .", "echo 'examples/blog: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+
+[tasks."example:html-template"]
+description = "Serve examples/html-template on http://localhost:8080 (Ctrl-C stops it)."
+dir = "examples/html-template"
+raw = true
+run = ["echo 'examples/html-template: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+
+[tasks."example:htmx"]
+description = "Serve examples/htmx on http://localhost:8080 (Ctrl-C stops it)."
+dir = "examples/htmx"
+raw = true
+run = ["go tool gsx generate -q .", "echo 'examples/htmx: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+
+[tasks."example:htmx-render-target"]
+description = "Serve examples/htmx-render-target on http://localhost:8080 (Ctrl-C stops it)."
+dir = "examples/htmx-render-target"
+raw = true
+run = ["go tool gsx generate -q .", "echo 'examples/htmx-render-target: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+
+[tasks."example:simple"]
+description = "Serve examples/simple on http://localhost:8080 (Ctrl-C stops it)."
+dir = "examples/simple"
+raw = true
+run = ["go tool gsx generate -q .", "echo 'examples/simple: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+
+[tasks."example:todo"]
+description = "Serve examples/todo on http://localhost:8080 (Ctrl-C stops it)."
+dir = "examples/todo"
+raw = true
+run = ["go tool gsx generate -q .", "echo 'examples/todo: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+
+[tasks."example:url-validation"]
+description = "Serve examples/url-validation on http://localhost:8080 (Ctrl-C stops it)."
+dir = "examples/url-validation"
+raw = true
+run = ["echo 'examples/url-validation: http://localhost:8080 (Ctrl-C stops it)'", "go run ."]
+
 [tasks."lint:examples"]
 description = "Run structpages-lint, built from tools/lint, over every example but lint-misuse (its misuses are deliberate; its own test checks them)."
 dir = "tools/lint"

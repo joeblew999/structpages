@@ -25,7 +25,7 @@ dev = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}}"
 
 # ---- Tests, three ways: the library (the root folder) and each example, the same way ------------------------------
 #
-# An example's e2e_test.go crawls its app (tools/e2e) and compares every response with testdata/e2e.generated.txt,
+# An example's e2e_test.go crawls its app (the e2e package) and compares every response with testdata/e2e.generated.txt,
 # recorded from reflect. lint-misuse is a linter fixture: its tests check the linter.
 
 [tasks.test]
@@ -238,10 +238,10 @@ description = "Fail if any file needs gofmt (CI's Format job)."
 run = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
 
 # vet and lint check each module, and again with the build tags that pick other files: the library's generated and
-# tinygo files, tools/e2e's tinygo one and the workers module's js/wasm one, which TinyGo builds.
+# tinygo files (e2e's among them) and the workers module's js/wasm one, which TinyGo builds.
 
 [tasks.vet]
-description = "go vet on the library, workers, tools/gen, tools/e2e, tools/dev and tools/workers, each build too (CI's Format job)."
+description = "go vet on the library, workers, tools/gen, tools/dev and tools/workers, each build too (CI's Format job)."
 run = [
   "go vet ./...",
   "go vet -tags structpages_generated ./...",
@@ -249,14 +249,12 @@ run = [
   "go vet -C workers ./...",
   "GOOS=js GOARCH=wasm go vet -C workers ./...",
   "go vet -C tools/gen ./...",
-  "go vet -C tools/e2e ./...",
-  "go vet -C tools/e2e -tags tinygo ./...",
   "go vet -C tools/dev ./...",
   "go vet -C tools/workers ./...",
 ]
 
 [tasks.lint]
-description = "golangci-lint on the library, workers, tools/gen, tools/e2e, tools/dev and tools/workers, each build too (CI's Lint job)."
+description = "golangci-lint on the library, workers, tools/gen, tools/dev and tools/workers, each build too (CI's Lint job)."
 run = [
   "golangci-lint run --timeout=5m",
   "golangci-lint run --timeout=5m --build-tags structpages_generated",
@@ -264,8 +262,6 @@ run = [
   "cd workers && golangci-lint run --timeout=5m",
   "cd workers && GOOS=js GOARCH=wasm golangci-lint run --timeout=5m",
   "cd tools/gen && golangci-lint run --timeout=5m",
-  "cd tools/e2e && golangci-lint run --timeout=5m",
-  "cd tools/e2e && golangci-lint run --timeout=5m --build-tags tinygo",
   "cd tools/dev && golangci-lint run --timeout=5m",
   "cd tools/workers && golangci-lint run --timeout=5m",
 ]

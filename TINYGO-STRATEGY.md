@@ -120,8 +120,8 @@ In order:
      that differs in the other two is a failure. It finds each example's routes by itself, so there are no per-example
      lists to keep up, and it needs no sockets, so TinyGo can run it.
 
-     **Status: built, and tried on one example first.** It is `tools/e2e` (`e2e.Crawl`, no dependencies, its own
-     module like `tools/gen`). `todo` has its `handler()` and a one-line `e2e_test.go`; its recording is
+     **Status: built, and tried on one example first.** It is the `e2e` package (`e2e.Crawl`), in the library's module next
+     to `generated`, as it needs nothing outside the standard library. `todo` has its `handler()` and a one-line `e2e_test.go`; its recording is
      `testdata/e2e.generated.txt`. The crawl found all eight of its requests by itself: the page, `POST /add`, and
      toggle and delete for each todo, as htmx partials. `mise run examples` shows: reflection pass, generated
      pass, **TinyGo fail at `POST /toggle/3`**, which answers 200 without toggling: the `{id}` wildcard is lost under

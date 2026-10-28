@@ -109,14 +109,15 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// walk calls fn for each file in f, leaving out its examples and tools, which
-// are folders of their own.
+// walk calls fn for each file in f, leaving out the folders with a go.mod of
+// their own (the examples, tools and workers), which are other modules,
+// as go's ./... does.
 func (f folder) walk(fn func(path string)) {
 	_ = filepath.WalkDir(f.dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
-		if d.IsDir() && path != f.dir && (d.Name() == "examples" || d.Name() == "tools" || d.Name() == ".git") {
+		if d.IsDir() && path != f.dir && (d.Name() == ".git" || fileExists(filepath.Join(path, "go.mod"))) {
 			return filepath.SkipDir
 		}
 		if !d.IsDir() {

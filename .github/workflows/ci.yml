@@ -107,8 +107,6 @@ jobs:
           go vet -C workers ./...
           GOOS=js GOARCH=wasm go vet -C workers ./...
           go vet -C tools/gen ./...
-          go vet -C tools/e2e ./...
-          go vet -C tools/e2e -tags tinygo ./...
           go vet -C tools/dev ./...
           go vet -C tools/workers ./...
 
@@ -167,20 +165,6 @@ jobs:
           version: latest
           working-directory: tools/gen
           args: --timeout=5m
-
-      - name: golangci-lint (tools/e2e)
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: latest
-          working-directory: tools/e2e
-          args: --timeout=5m
-
-      - name: golangci-lint (tools/e2e, tinygo)
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: latest
-          working-directory: tools/e2e
-          args: --timeout=5m --build-tags tinygo
 
       - name: golangci-lint (tools/dev)
         uses: golangci/golangci-lint-action@v8

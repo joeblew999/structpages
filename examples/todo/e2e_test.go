@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/jackielii/structpages/tools/e2e"
+	"github.com/jackielii/structpages/e2e"
 )
 
 // TestE2E crawls the app from / and compares every response with

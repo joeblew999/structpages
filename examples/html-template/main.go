@@ -164,7 +164,10 @@ func (post) Comments(props postProps) tpl {
 	return tpl{page: "post", entry: "post/comments-list", data: props.Comments}
 }
 
-func main() {
+// handler builds the app: the pages mounted on their own mux, and their
+// templates parsed. main serves it: main_server.go on a server,
+// main_worker.go as a Cloudflare Worker. e2e_test.go calls it directly.
+func handler() http.Handler {
 	mux := http.NewServeMux()
 	sp, err := structpages.Mount(mux, index{}, "/", "Index",
 		structpages.WithTargetSelector(structpages.HTMXv4RenderTarget),
@@ -197,7 +200,5 @@ func main() {
 		"contact": parseSet("pages/contact.html"),
 		"post":    parseSet("post/page.html"),
 	}
-
-	log.Println("Listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	return mux
 }

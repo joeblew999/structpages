@@ -5,7 +5,8 @@ description: >
   Use when writing routes, pages, page groups, Props methods, handler methods (ServeHTTP), page components,
   partials, HTMX partial rendering and nested swap levels, URL and element-id generation (the gsx
   `url`/`id`/`target` filters, URLFor/ID/IDTarget), RenderTarget/RenderComponent patterns, middleware or
-  dependency injection with structpages, or running and reading structpages-lint. Also use when the user asks
+  dependency injection with structpages, running and reading structpages-lint, or building for TinyGo
+  (structpages-gen tables). Also use when the user asks
   about structpages patterns, conventions, vocabulary, or debugging structpages issues. Covers templ and
   html/template users too.
 ---
@@ -488,6 +489,29 @@ go tool structpages-lint ./...
 
 reference.md §Lint lists the categories, the gsx specifics and the suppression rules.
 
+## 10. TinyGo: generated method tables
+
+TinyGo's `reflect` can't list or call methods or name a function, which is how structpages finds a page's
+methods, fills their parameters and resolves `ID(ctx, p.Content)`. A TinyGo build (or `-tags
+structpages_tables`) reads the same from tables that `structpages-gen` generates. Pages don't change.
+
+```shell
+go get -tool github.com/jackielii/structpages/cmd/structpages-gen@latest
+go tool structpages-gen ./...              # writes structpages_tables.go in each package with pages
+go tool structpages-gen -tags tinygo ./... # when some files build only under TinyGo, or never under it
+```
+
+- Run it after `go tool gsx generate`: page components are methods in the generated `.x.go`.
+- Run it again whenever a page's methods, a `Props` or handler signature, a request-arg provider or a
+  standalone component changes. A stale table fails at `Mount`, naming the type: `no method table for
+  app.page; run go tool structpages-gen`. That message means regenerate, not edit.
+- Generate with the build's own tags: tables written for one set of files don't compile against another.
+  `-test` adds what `_test.go` files declare, for `tinygo test`.
+- Never edit `structpages_tables.go`. Commit it like gsx's `.x.go`, or generate it in the build.
+- Generic page types can't be tabled (the generator warns); give a TinyGo app concrete page types.
+- TinyGo's own `net/http` mux lacks Go 1.22 patterns (`GET /items/{id}`, `/{$}`): mount on a mux that has
+  them. See docs/tinygo.md.
+
 ## Key rules
 
 1. Read path params with `r.PathValue("itemId")`.
@@ -509,3 +533,5 @@ reference.md §Lint lists the categories, the gsx specifics and the suppression 
     `WithTargetSelector(HTMXv4RenderTarget)` (htmx 4). Without it every request renders `Page`.
 11. Run `structpages-lint ./...` in CI and after every route or page rename; fix findings, don't suppress
     them.
+12. Under TinyGo, rerun `structpages-gen` (with the build's tags) after any change to a page's methods or
+    signatures, and after `gsx generate`.

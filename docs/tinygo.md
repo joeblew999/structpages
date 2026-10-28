@@ -45,7 +45,7 @@ workerd serve build/config.capnp
 
 `structpages-workers` writes a `worker.mjs`, over the one `workers-assets-gen` writes, that starts one Go runtime per
 isolate, and a `config.capnp` serving on `:8080`. In this repo, `mise run example:todo:serve:tinygo` does all of that
-for `examples/todo`.
+for `examples/todo`, in a temporary folder it deletes on Ctrl-C.
 
 ## When TinyGo catches up
 

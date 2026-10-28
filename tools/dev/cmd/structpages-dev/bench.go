@@ -17,30 +17,25 @@ var (
 	benchmemArg = "-benchmem"
 )
 
-// bench is the bench command: each folder's benchmarks three ways, compared
-// with benchstat, into the folder's BENCH_GENERATED.md.
+// bench is the bench command: a folder's benchmarks three ways, compared with
+// benchstat, into the folder's BENCH_GENERATED.md.
 func bench(args []string) int {
-	list, err := folders(args, nil)
-	if err != nil {
-		fail(err)
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev bench folder")
+		return 2
 	}
-	cleanOnInterrupt(list)
-	code := 0
-	for _, f := range list {
-		if !hasBenchmarks(f) {
-			if len(args) == 1 && !strings.HasSuffix(args[0], "/...") {
-				fmt.Fprintf(os.Stderr,
-					"%s has no benchmarks yet: add a BenchmarkCheck to its check_test.go, like examples/todo's\n", f.dir)
-				code = 2
-			}
-			continue
-		}
-		if err := benchFolder(f); err != nil {
-			fmt.Fprintf(os.Stderr, "structpages-check: %s: %v\n", f.dir, err)
-			code = 1
-		}
+	f := newFolder(args[0])
+	if !hasBenchmarks(f) {
+		fmt.Fprintf(os.Stderr, "%s has no benchmarks yet: add a BenchmarkE2E to its e2e_test.go, as examples/todo has\n",
+			f.dir)
+		return 2
 	}
-	return code
+	onInterrupt(f.cleanGenerated)
+	if err := benchFolder(f); err != nil {
+		fmt.Fprintf(os.Stderr, "structpages-dev: %s: %v\n", f.dir, err)
+		return 1
+	}
+	return 0
 }
 
 var benchmarkFunc = regexp.MustCompile(`(?m)^func Benchmark`)
@@ -57,10 +52,10 @@ func hasBenchmarks(f folder) bool {
 }
 
 func benchFolder(f folder) error {
-	defer f.cleanBuild()
+	defer f.cleanGenerated()
 	if f.usesGSX() {
-		if out, err := run(f.dir, "go", "tool", "gsx", "generate", "-q", "."); err != nil {
-			return fmt.Errorf("gsx generate: %w\n%s", err, out)
+		if err := gsxGenerate(f, false); err != nil {
+			return err
 		}
 	}
 	// In-process: each way's own test binary calls the code directly.
@@ -82,18 +77,18 @@ func benchFolder(f folder) error {
 	served, wasm := "(the library is no app: nothing to serve)", ""
 	if f.name != "library" {
 		served = "(not served: " + f.dir + " doesn't serve through the workers module yet)"
-		if mod, _ := os.ReadFile(filepath.Join(f.dir, "go.mod")); strings.Contains(string(mod), "structpages/workers ") {
+		if f.servesWorkers() {
 			times := map[string]string{}
 			for _, way := range ways {
 				fmt.Printf("== %s, served: %s...\n", f.name, way)
-				out, serr := benchServed(f, way)
+				out, size, serr := benchServed(f, way)
 				if serr != nil {
 					return serr
 				}
 				times[way] = out
-			}
-			if info, serr := os.Stat(filepath.Join(f.dir, workerDir, "app.wasm")); serr == nil {
-				wasm = fmt.Sprintf("%d KB of", info.Size()/1024)
+				if size > 0 {
+					wasm = fmt.Sprintf("%d KB of", size/1024)
+				}
 			}
 			if served, err = benchstat(times); err != nil {
 				return err
@@ -133,32 +128,33 @@ func benchWay(f folder, way string) (string, error) {
 }
 
 // benchServed serves f one way and times its benchmarks against it over
-// local HTTP, from one standard Go client (check.Bench with CHECK_URL), so
-// all three ways pay the same network cost.
-func benchServed(f folder, way string) (string, error) {
-	s, err := start(f, way, nil)
+// local HTTP, from one standard Go client (e2e.Bench with E2E_URL), so all
+// three ways pay the same network cost. It returns them and, for TinyGo, the
+// size of app.wasm.
+func benchServed(f folder, way string) (times string, wasm int64, err error) {
+	s, err := start(f, way, nil, true)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer s.stop()
 	if werr := waitUp(s, 7*time.Minute); werr != nil {
-		return "", fmt.Errorf("%s, %s: %w", f.dir, way, werr)
+		return "", 0, fmt.Errorf("%s, %s: %w", f.dir, way, werr)
 	}
 	args := append(append([]string{"test"}, benchFlags...), ".")
 	cmd := exec.Command("go", args...) //nolint:gosec // the go toolchain, on the folder asked
 	cmd.Dir = f.dir
-	cmd.Env = append(os.Environ(), "CHECK_URL=http://"+addr)
+	cmd.Env = append(os.Environ(), "E2E_URL=http://"+addr)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("%s, served %s: %w\n%s", f.dir, way, err, failureLines(string(out)))
+		return "", 0, fmt.Errorf("%s, served %s: %w\n%s", f.dir, way, err, failureLines(string(out)))
 	}
-	return string(out), nil
+	return string(out), s.wasm, nil
 }
 
 // benchstat compares the three ways' benchmark output, as the benchstat
 // command does (mise installs it), and returns its tables.
 func benchstat(outs map[string]string) (string, error) {
-	dir, err := os.MkdirTemp("", "structpages-check-bench-")
+	dir, err := os.MkdirTemp("", "structpages-dev-bench-")
 	if err != nil {
 		return "", err
 	}
@@ -220,7 +216,7 @@ what Cloudflare runs), timed over local HTTP by one standard Go client, so all t
 `+"```"+`
 %s
 `+"```"+`
-`, task, f.name, stamp(file), version("go", "version"), version("tinygo", "version"), cpu,
+`, task, f.name, stamp(), version("go", "version"), version("tinygo", "version"), cpu,
 		version("workerd", "--version"),
 		inProcess, f.name, wasm, served)
 	if err := os.WriteFile(file, []byte(doc), 0o600); err != nil {
@@ -230,12 +226,12 @@ what Cloudflare runs), timed over local HTTP by one standard Go client, so all t
 	return nil
 }
 
-// stamp is the commit the numbers are from, and whether anything but file
-// itself was changed from it: writing file would count as a change.
-func stamp(file string) string {
+// stamp is the commit the numbers are from, and whether anything but the
+// BENCH_GENERATED.md files was changed from it: writing them would count.
+func stamp() string {
 	commit, _ := run(".", "git", "rev-parse", "--short", "HEAD")
 	s := "Commit " + strings.TrimSpace(commit)
-	diff := exec.Command("git", "diff", "--quiet", "HEAD", "--", ".", ":!"+file) //nolint:gosec // git, on the file written
+	diff := exec.Command("git", "diff", "--quiet", "HEAD", "--", ".", ":(exclude,glob)**/BENCH_GENERATED.md")
 	if err := diff.Run(); err != nil {
 		s += " + uncommitted changes"
 	}

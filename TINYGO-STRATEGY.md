@@ -19,7 +19,7 @@ structpages needs.
 
 "The same" is measured, not assumed. For the library, `mise run test` runs its one test suite all three ways and shows,
 for each, how many passed and every test it skipped, with why. For the examples, `mise run examples` does the same for
-each, and every example's check compares its responses all three ways (see the strategy). Parity is no differences
+each, and every example's e2e test compares its responses all three ways (see the strategy). Parity is no differences
 left.
 
 ## How it works
@@ -120,9 +120,9 @@ In order:
      that differs in the other two is a failure. It finds each example's routes by itself, so there are no per-example
      lists to keep up, and it needs no sockets, so TinyGo can run it.
 
-     **Status: built, and tried on one example first.** The checker is `tools/check` (`check.Crawl`, no dependencies,
-     its own module like `tools/gen`). `todo` has its `handler()` and a one-line `check_test.go`; its recording is
-     `testdata/check.generated.txt`. The crawl found all eight of its requests by itself: the page, `POST /add`, and
+     **Status: built, and tried on one example first.** It is `tools/e2e` (`e2e.Crawl`, no dependencies, its own
+     module like `tools/gen`). `todo` has its `handler()` and a one-line `e2e_test.go`; its recording is
+     `testdata/e2e.generated.txt`. The crawl found all eight of its requests by itself: the page, `POST /add`, and
      toggle and delete for each todo, as htmx partials. `mise run examples` shows: reflection pass, generated
      pass, **TinyGo fail at `POST /toggle/3`**, which answers 200 without toggling: the `{id}` wildcard is lost under
      TinyGo's mux. Once this shape is agreed, the other seven examples follow it.
@@ -140,7 +140,7 @@ In order:
    app's mux only the mount's prefix (`routes_generated.go`); the reflect build registers on the app's mux as before
    (`routes_go.go`). So apps keep `http.NewServeMux()`, and generated and TinyGo differ only in their compiler.
    `workers.Serve` serves on `net/http` or, in a Worker, through workerd, and `tools/workers` writes the Worker's
-   JavaScript glue. `todo`'s check passes all three ways, and served in workerd its toggle and delete work and its state
+   JavaScript glue. `todo`'s e2e test passes all three ways, and served in workerd its toggle and delete work and its state
    is kept. The other examples follow when they get `todo`'s shape.
 3. **Run the TinyGo way where it will really run.** Serve each example's handler from `workerd`, locally, through
    workers-go (go-htmx4 pins workerd and TinyGo in mise for this). Then the checker can also crawl it over HTTP, and
@@ -174,10 +174,11 @@ In order:
 ## Checking progress
 
 ```bash
-mise run test                     # library: its tests three ways, with every skip
-mise run examples                # every example's tests three ways, as a grid
+mise run test                       # library: its tests three ways, with every skip
+mise run examples                   # every example's tests three ways, a line each
+mise run example:todo:test          # todo's tests three ways
 mise run example:todo:serve:tinygo  # serve todo as WebAssembly in workerd (and :serve:reflect, :serve:generated)
-mise run bench:examples           # every example's pages three ways, into its BENCH_GENERATED.md
-mise run bench                    # library: its benchmarks three ways, into BENCH_GENERATED.md
-mise run ci:go                    # everything upstream's CI checks on Go
+mise run bench:examples             # every example's pages three ways, into its BENCH_GENERATED.md
+mise run bench                      # library: its benchmarks three ways, into BENCH_GENERATED.md
+mise run ci:go                      # everything upstream's CI checks on Go
 ```

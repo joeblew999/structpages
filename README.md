@@ -175,17 +175,19 @@ passed to `ID`. [docs/generated.md](./docs/generated.md) says how to use it, and
 build for TinyGo and Workers, and what to remove once TinyGo catches up.
 
 **Running it.** Install [mise](https://mise.jdx.dev), which brings the Go, TinyGo and tool versions in `mise.toml`;
-`mise tasks` lists everything.
+`mise tasks` lists everything. The tasks run `structpages-dev` (`tools/dev`) on one folder, the library or an example,
+with the same steps every way: generate the code the way needs, build, test, benchmark or serve, then delete what it
+generated. A task over several folders lists them in `mise.toml`.
 
 | Task | Runs |
 |---|---|
 | `mise run test` | the library's tests three ways (reflect, generated, tinygo), with every test each skips |
-| `mise run examples` | every example's tests three ways, as a grid (`examples:record` re-records their checks) |
+| `mise run examples` | every example's tests three ways, a line each (`examples:record` re-records `todo`'s e2e test) |
 | `mise run example:todo:serve:reflect` / `example:todo:serve:generated` / `example:todo:serve:tinygo` | serve an example on http://localhost:8080 each way (tinygo: WebAssembly in workerd; `todo` so far) |
 | `mise run example:todo:test` / `example:todo:bench` | `todo`'s tests three ways / its benchmarks three ways, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md) |
 | `mise run bench` / `bench:examples` | benchmarks three ways: the library's into [BENCH_GENERATED.md](./BENCH_GENERATED.md), each example's into its own `BENCH_GENERATED.md` ([todo's](./examples/todo/BENCH_GENERATED.md)) |
 | `mise run gen:examples` / `lint:examples` | structpages-gen (`tools/gen`) or structpages-lint (`tools/lint`) over every example |
-| `mise run clean:generated` | delete everything generated |
+| `mise run clean:generated` | delete everything generated, if a run was stopped before it could |
 | `mise run ci:go` | everything CI checks on standard Go |
 
 On standard Go, generated code comes out about even with `reflect` in the library's micro-benchmarks (faster for `ID`,

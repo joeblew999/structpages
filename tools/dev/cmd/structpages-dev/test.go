@@ -9,32 +9,29 @@ import (
 	"strings"
 )
 
-// test is the test command: each folder built and tested each way, a line
-// each, then what was skipped and what failed. It returns the exit code.
+// test is the test command: a folder built and tested each way, on a line,
+// then what was skipped and what failed. It returns the exit code.
 func test(args []string) int {
 	set := flag.NewFlagSet("test", flag.ExitOnError)
 	waysFlag := set.String("ways", strings.Join(ways, ","), "the ways to build and test, in order")
-	skipFlag := set.String("skip", "", "folder names to leave out of a dir/... (comma-separated)")
 	_ = set.Parse(args)
+	if set.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev test [-ways reflect,generated,tinygo] folder")
+		return 2
+	}
 	chosen := strings.Split(*waysFlag, ",")
 	for _, w := range chosen {
 		if !slices.Contains(ways, w) {
-			fmt.Fprintf(os.Stderr, "structpages-check: the way is reflect, generated or tinygo, not %q\n", w)
+			fmt.Fprintf(os.Stderr, "structpages-dev: the way is reflect, generated or tinygo, not %q\n", w)
 			return 2
 		}
 	}
-	list, err := folders(set.Args(), strings.Split(*skipFlag, ","))
-	if err != nil {
-		fail(err)
+	f := newFolder(set.Arg(0))
+	onInterrupt(f.cleanGenerated)
+	if !testFolder(f, chosen) {
+		return 1
 	}
-	cleanOnInterrupt(list)
-	code := 0
-	for _, f := range list {
-		if !testFolder(f, chosen) {
-			code = 1
-		}
-	}
-	return code
+	return 0
 }
 
 // result is one way's outcome for one folder.
@@ -144,7 +141,7 @@ func testWay(f folder, way string, tests bool) result {
 		testCmd = []string{"go", "test", "-race", "-count=1", "-v", "./..."}
 	case "generated":
 		build = []string{"go", "build", "-tags", generatedTag, "-o", os.DevNull, "./..."}
-		testCmd = []string{"go", "test", "-count=1", "-tags", generatedTag, "-v", "./..."}
+		testCmd = []string{"go", "test", "-race", "-count=1", "-tags", generatedTag, "-v", "./..."}
 	case "tinygo":
 		// A library has no main package for TinyGo to build; its tests build it.
 		if f.name != "library" {

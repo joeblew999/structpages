@@ -63,7 +63,7 @@ func removeTodo(id int) {
 
 // handler builds the app: the pages mounted on their own mux, with some
 // sample todos. main serves it (workers.Serve, which also serves it as a
-// Worker under TinyGo); check_test.go calls it directly.
+// Worker under TinyGo); e2e_test.go calls it directly.
 func handler() http.Handler {
 	// Add some sample todos
 	addTodo("Learn Go")

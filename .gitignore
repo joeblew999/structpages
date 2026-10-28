@@ -51,4 +51,3 @@ examples/lint-misuse/lint-misuse
 /structpages*.generated*.go
 /internal/*/structpages*.generated*.go
 /examples/**/structpages*.generated*.go
-/examples/*/worker.generated/

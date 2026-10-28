@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-package check
+package e2e
 
 import (
 	"net/http"
@@ -13,9 +13,8 @@ import (
 func remote(tb testing.TB, base string) http.Handler {
 	u, err := url.Parse(base)
 	if err != nil {
-		tb.Fatalf("check: %s: %v", URLEnv, err)
+		tb.Fatalf("e2e: %s: %v", URLEnv, err)
 	}
-	// CHECK_URL is set by the mise task running the benchmark, to the local server it started.
+	// E2E_URL is set by structpages-dev bench, to the local server it started.
 	return httputil.NewSingleHostReverseProxy(u) //nolint:gosec // not user input: see above
-
 }

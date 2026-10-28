@@ -6,6 +6,10 @@
 #   generated  standard Go, -tags structpages_generated: it reads code structpages-gen generates instead
 #   tinygo     TinyGo, which always reads the generated code
 # Everything generated is named *.generated* and gitignored (mise run clean:generated deletes it).
+#
+# Most tasks run structpages-dev (tools/dev) on one folder: the library (.) or an example. It does the same steps
+# every way: generate the code the way needs, build, then test, benchmark or serve, and delete what it generated
+# and built. A task over several folders lists them, a line each.
 
 [tools]
 go = "1.26"
@@ -15,138 +19,164 @@ workerd = "1.20261019.1"            # Cloudflare's Workers runtime, to serve Tin
 golangci-lint = "2"
 "go:golang.org/x/perf/cmd/benchstat" = "latest"
 
+[vars]
+# structpages-dev from this repository, working in its root; the folder and what to do follow.
+dev = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}}"
+
 # ---- Tests, three ways: the library (the root folder) and each example, the same way ------------------------------
 #
-# An example's check_test.go crawls its app (tools/check) and compares every response with
-# testdata/check.generated.txt, recorded from reflect. lint-misuse is a linter fixture: its tests check the linter.
+# An example's e2e_test.go crawls its app (tools/e2e) and compares every response with testdata/e2e.generated.txt,
+# recorded from reflect. lint-misuse is a linter fixture: its tests check the linter.
 
 [tasks.test]
-description = """The library's tests three ways (reflect with the race detector, generated, tinygo): a line with how \
-many passed each way, then every test skipped, with why, and the first lines of any failure."""
+description = """The library's tests three ways (reflect and generated with the race detector, which TinyGo lacks): \
+a line with how many passed each way, then every test skipped, with why, and the first lines of any failure."""
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} test ."
+run = "{{vars.dev}} test ."
 
 [tasks.examples]
 description = """Every example's tests three ways, as test does for the library: a line each, and "no tests" for an \
-example with none yet. One example: example:<name>:test."""
+example with none yet. examples/todo alone: example:todo:test."""
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} test -skip lint-misuse examples/..."
+run = [
+  "{{vars.dev}} test examples/blog",
+  "{{vars.dev}} test examples/html-template",
+  "{{vars.dev}} test examples/htmx",
+  "{{vars.dev}} test examples/htmx-render-target",
+  "{{vars.dev}} test examples/simple",
+  "{{vars.dev}} test examples/todo",
+  "{{vars.dev}} test examples/url-validation",
+]
+
+[tasks."example:todo:test"]
+description = "examples/todo's tests three ways: reflect, generated, tinygo."
+quiet = true
+run = "{{vars.dev}} test examples/todo"
 
 [tasks."examples:record"]
-description = """Record every example's check (testdata/check.generated.txt) from reflect: the reference the other two \
+description = """Record examples/todo's e2e test (testdata/e2e.generated.txt) from reflect: the reference the other two \
 ways are compared with. Review the diff before committing it."""
-run = '''
-for d in examples/*/; do
-  [ -f "$d/check_test.go" ] || continue
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
-  (cd "$d" && CHECK_UPDATE=1 go test -count=1 -run TestCheck .) || exit 1
-done
-git status --short -- examples
-'''
+run = [
+  "go -C examples/todo tool gsx generate -q .",
+  "E2E_UPDATE=1 go -C examples/todo test -count=1 -run TestE2E .",
+  "git status --short -- examples/todo",
+]
 
-# Serving an example on http://localhost:8080 until Ctrl-C, with structpages-check serve: example:<name>:serve:reflect,
-# :serve:generated, and :serve:tinygo, WebAssembly in workerd, for an example that serves through workers.Serve, as
-# todo does (a TinyGo build can't listen on a socket).
+# ---- Serving an example on http://localhost:8080 until Ctrl-C, each way --------------------------------------------
+#
+# Under tinygo the app is WebAssembly in workerd, for an example that serves through workers.Serve, as todo does
+# (a TinyGo build can't listen on a socket). Ctrl-C deletes what was generated and built.
 
 [tasks."example:blog:serve:reflect"]
 description = "Serve examples/blog on :8080, reflect."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/blog reflect"
+run = "{{vars.dev}} serve examples/blog reflect"
 
 [tasks."example:blog:serve:generated"]
 description = "Serve examples/blog on :8080, generated."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/blog generated"
+run = "{{vars.dev}} serve examples/blog generated"
 
 [tasks."example:html-template:serve:reflect"]
 description = "Serve examples/html-template on :8080, reflect."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/html-template reflect"
+run = "{{vars.dev}} serve examples/html-template reflect"
 
 [tasks."example:html-template:serve:generated"]
 description = "Serve examples/html-template on :8080, generated."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/html-template generated"
+run = "{{vars.dev}} serve examples/html-template generated"
 
 [tasks."example:htmx:serve:reflect"]
 description = "Serve examples/htmx on :8080, reflect."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx reflect"
+run = "{{vars.dev}} serve examples/htmx reflect"
 
 [tasks."example:htmx:serve:generated"]
 description = "Serve examples/htmx on :8080, generated."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx generated"
+run = "{{vars.dev}} serve examples/htmx generated"
 
 [tasks."example:htmx-render-target:serve:reflect"]
 description = "Serve examples/htmx-render-target on :8080, reflect."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx-render-target reflect"
+run = "{{vars.dev}} serve examples/htmx-render-target reflect"
 
 [tasks."example:htmx-render-target:serve:generated"]
 description = "Serve examples/htmx-render-target on :8080, generated."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx-render-target generated"
+run = "{{vars.dev}} serve examples/htmx-render-target generated"
 
 [tasks."example:simple:serve:reflect"]
 description = "Serve examples/simple on :8080, reflect."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/simple reflect"
+run = "{{vars.dev}} serve examples/simple reflect"
 
 [tasks."example:simple:serve:generated"]
 description = "Serve examples/simple on :8080, generated."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/simple generated"
+run = "{{vars.dev}} serve examples/simple generated"
 
 [tasks."example:todo:serve:reflect"]
 description = "Serve examples/todo on :8080, reflect."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/todo reflect"
+run = "{{vars.dev}} serve examples/todo reflect"
 
 [tasks."example:todo:serve:generated"]
 description = "Serve examples/todo on :8080, generated."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/todo generated"
+run = "{{vars.dev}} serve examples/todo generated"
 
 [tasks."example:todo:serve:tinygo"]
 description = "Serve examples/todo on :8080, tinygo: WebAssembly in workerd."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/todo tinygo"
-
-[tasks."example:todo:test"]
-description = "examples/todo's tests three ways: reflect, generated, tinygo."
-quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} test examples/todo"
-
-[tasks."example:todo:bench"]
-description = "examples/todo's benchmarks three ways, into examples/todo/BENCH_GENERATED.md."
-quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} bench examples/todo"
+run = "{{vars.dev}} serve examples/todo tinygo"
 
 [tasks."example:url-validation:serve:reflect"]
 description = "Serve examples/url-validation on :8080, reflect."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/url-validation reflect"
+run = "{{vars.dev}} serve examples/url-validation reflect"
 
 [tasks."example:url-validation:serve:generated"]
 description = "Serve examples/url-validation on :8080, generated."
 raw = true
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/url-validation generated"
+run = "{{vars.dev}} serve examples/url-validation generated"
+
+# ---- Benchmarks, three ways: the library (the root folder) and each example, the same way -------------------------
+
+[tasks.bench]
+description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
+BENCH_GENERATED.md."""
+quiet = true
+run = "{{vars.dev}} bench ."
+
+[tasks."bench:examples"]
+description = """Every example with benchmarks (examples/todo, so far), three ways, in-process and as served, each into \
+its own BENCH_GENERATED.md, as bench does for the library. examples/todo alone: example:todo:bench."""
+quiet = true
+run = [
+  "{{vars.dev}} bench examples/todo",
+]
+
+[tasks."example:todo:bench"]
+description = "examples/todo's benchmarks three ways, into examples/todo/BENCH_GENERATED.md."
+quiet = true
+run = "{{vars.dev}} bench examples/todo"
 
 # ---- The repo's two tools, over every example -------------------------------------------------------------------
 
@@ -181,50 +211,61 @@ exit $fail
 '''
 
 [tasks."clean:generated"]
-description = "Delete everything generated: the structpages*.generated*.go files and the examples' worker.generated/."
-run = [
-  "find . -name 'structpages*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'",
-  "find examples -type d -name worker.generated -prune -print -exec rm -rf {} + | sed 's/^/deleted /'",
-]
-
-# ---- Benchmarks, three ways: the library (the root folder) and each example, the same way -------------------------
-
-[tasks.bench]
-description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
-BENCH_GENERATED.md."""
-quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} bench ."
-
-[tasks."bench:examples"]
-description = """Every example's benchmarks three ways, in-process and as served, each into its own BENCH_GENERATED.md, \
-as bench does for the library. One example: example:<name>:bench."""
-quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} bench examples/..."
+description = "Delete everything generated: the structpages*.generated*.go files, if a run was stopped before it could."
+run = "find . -name 'structpages*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'"
 
 # ---- What upstream's CI checks, on standard Go --------------------------------------------------------------------
 
 [tasks."ci:go"]
 description = """Everything CI checks on standard Go: fmt, vet, lint, then the library and every example built and \
-tested the reflect way, with structpages-check, as test and examples do."""
+tested the reflect way, as test and examples do."""
 depends = ["fmt", "vet", "lint"]
 quiet = true
-run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} test -ways reflect . examples/..."
+run = [
+  "{{vars.dev}} test -ways reflect .",
+  "{{vars.dev}} test -ways reflect examples/blog",
+  "{{vars.dev}} test -ways reflect examples/html-template",
+  "{{vars.dev}} test -ways reflect examples/htmx",
+  "{{vars.dev}} test -ways reflect examples/htmx-render-target",
+  "{{vars.dev}} test -ways reflect examples/lint-misuse",
+  "{{vars.dev}} test -ways reflect examples/simple",
+  "{{vars.dev}} test -ways reflect examples/todo",
+  "{{vars.dev}} test -ways reflect examples/url-validation",
+]
 
 [tasks.fmt]
 description = "Fail if any file needs gofmt (CI's Format job)."
 run = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
 
+# vet and lint check each module, and again with the build tags that pick other files: the library's generated and
+# tinygo files, tools/e2e's tinygo one and the workers module's js/wasm one, which TinyGo builds.
+
 [tasks.vet]
-description = "go vet on the library, workers, tools/gen, tools/check and tools/workers (CI's Format job)."
-run = ["go vet ./...", "go vet -C tools/gen ./...", "go vet -C tools/check ./...", "go vet -C workers ./...", "go vet -C tools/workers ./...", "go vet -C tools/check/cmd/structpages-check ./..."]
+description = "go vet on the library, workers, tools/gen, tools/e2e, tools/dev and tools/workers, each build too (CI's Format job)."
+run = [
+  "go vet ./...",
+  "go vet -tags structpages_generated ./...",
+  "go vet -tags tinygo ./...",
+  "go vet -C workers ./...",
+  "GOOS=js GOARCH=wasm go vet -C workers ./...",
+  "go vet -C tools/gen ./...",
+  "go vet -C tools/e2e ./...",
+  "go vet -C tools/e2e -tags tinygo ./...",
+  "go vet -C tools/dev ./...",
+  "go vet -C tools/workers ./...",
+]
 
 [tasks.lint]
-description = "golangci-lint on the library, workers, tools/gen, tools/check and tools/workers (CI's Lint job)."
+description = "golangci-lint on the library, workers, tools/gen, tools/e2e, tools/dev and tools/workers, each build too (CI's Lint job)."
 run = [
   "golangci-lint run --timeout=5m",
-  "cd tools/gen && golangci-lint run --timeout=5m",
-  "cd tools/check && golangci-lint run --timeout=5m",
+  "golangci-lint run --timeout=5m --build-tags structpages_generated",
+  "golangci-lint run --timeout=5m --build-tags tinygo",
   "cd workers && golangci-lint run --timeout=5m",
+  "cd workers && GOOS=js GOARCH=wasm golangci-lint run --timeout=5m",
+  "cd tools/gen && golangci-lint run --timeout=5m",
+  "cd tools/e2e && golangci-lint run --timeout=5m",
+  "cd tools/e2e && golangci-lint run --timeout=5m --build-tags tinygo",
+  "cd tools/dev && golangci-lint run --timeout=5m",
   "cd tools/workers && golangci-lint run --timeout=5m",
-  "cd tools/check/cmd/structpages-check && golangci-lint run --timeout=5m",
 ]

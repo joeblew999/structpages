@@ -1,21 +1,27 @@
-// Command structpages-check builds and tests the structpages library or an
-// app the three ways it runs: reflect (the standard build), generated (the
+// Command structpages-dev builds, tests, benchmarks and serves one folder
+// (the structpages library, ., or an app, such as examples/todo) the three
+// ways structpages runs: reflect (the standard build), generated (the
 // standard toolchain with -tags structpages_generated, reading the code
 // structpages-gen writes instead of method reflection) and tinygo (which
 // always reads that code):
 //
-//	structpages-check [-C dir] test [-ways reflect,generated,tinygo] [-skip name,...] folder...
+//	structpages-dev [-C dir] test [-ways reflect,generated,tinygo] folder
+//	structpages-dev [-C dir] bench folder
+//	structpages-dev [-C dir] serve folder reflect|generated|tinygo
 //
-// A folder is the library (.) or an app (examples/todo); one ending in /...
-// is every folder under it with a go.mod. For each folder, test regenerates
-// gsx output from scratch and fails if the committed .x.go files are stale,
-// then, each way, generates the code that way needs, builds every package and
-// runs the tests, and prints a line: how many passed each way, every test
-// skipped with why, and the first lines of any failure. The code it generates
-// goes when it is done.
+// Each job does the same steps every way: generate the code the way needs
+// (generated and tinygo), build, then test, benchmark or serve, and delete
+// what it generated and built when done. Which folders to run it on is the
+// caller's to say: in this repository, mise.toml lists them.
 //
-// It is its own module, apart from package check, which apps' tests import:
-// that one must stay small enough to build under TinyGo.
+// test builds every package and runs the tests (with the race detector,
+// which TinyGo lacks), regenerating gsx output from scratch first and
+// failing if the committed .x.go files are stale, and prints a line: how
+// many passed each way, every test skipped with why, and the failing tests'
+// own output. bench runs the folder's benchmarks in-process and, for an app
+// serving through workers.Serve, as served, and writes the folder's
+// BENCH_GENERATED.md. serve serves an app on :8080 until Ctrl-C: go run on
+// the standard toolchain, and under TinyGo a Worker in workerd.
 package main
 
 import (
@@ -29,7 +35,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -42,10 +47,9 @@ const generatedTag = "structpages_generated"
 func main() {
 	dir := flag.String("C", "", "change to `dir` before anything else, as go -C does")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr,
-			"usage: structpages-check [-C dir] test [-ways reflect,generated,tinygo] [-skip name,...] folder...\n"+
-				"       structpages-check [-C dir] bench folder...\n"+
-				"       structpages-check [-C dir] serve folder reflect|generated|tinygo")
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev [-C dir] test [-ways reflect,generated,tinygo] folder\n"+
+			"       structpages-dev [-C dir] bench folder\n"+
+			"       structpages-dev [-C dir] serve folder reflect|generated|tinygo")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -66,57 +70,38 @@ func main() {
 	case "serve":
 		os.Exit(serve(args))
 	default:
-		fmt.Fprintf(os.Stderr, "structpages-check: unknown command %q\n", cmd)
+		fmt.Fprintf(os.Stderr, "structpages-dev: unknown command %q\n", cmd)
 		flag.Usage()
 		os.Exit(2)
 	}
 }
 
 func fail(err error) {
-	fmt.Fprintln(os.Stderr, "structpages-check:", err)
+	fmt.Fprintln(os.Stderr, "structpages-dev:", err)
 	os.Exit(2)
 }
 
-// folder is one folder to check: the library, or an app.
+// folder is the folder a job runs on: the library, or an app.
 type folder struct {
 	dir  string // as given, relative to the working directory
 	abs  string
 	name string // "library", or the app's folder name
 }
 
-// folders expands the folders given: dir/... is every folder under dir with
-// a go.mod, sorted, less those named in skip.
-func folders(args, skip []string) ([]folder, error) {
-	var dirs []string
-	for _, a := range args {
-		base, many := strings.CutSuffix(filepath.ToSlash(a), "/...")
-		if !many {
-			dirs = append(dirs, filepath.Clean(a))
-			continue
-		}
-		entries, err := os.ReadDir(base)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range entries {
-			if e.IsDir() && fileExists(filepath.Join(base, e.Name(), "go.mod")) && !slices.Contains(skip, e.Name()) {
-				dirs = append(dirs, filepath.Join(base, e.Name()))
-			}
-		}
+func newFolder(dir string) folder {
+	dir = filepath.Clean(dir)
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		fail(err)
 	}
-	list := make([]folder, 0, len(dirs))
-	for _, d := range dirs {
-		abs, err := filepath.Abs(d)
-		if err != nil {
-			return nil, err
-		}
-		name := filepath.Base(abs)
-		if d == "." {
-			name = "library"
-		}
-		list = append(list, folder{dir: d, abs: abs, name: name})
+	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err != nil {
+		fail(fmt.Errorf("%s: no go.mod: a folder is the library (.) or an app's module", dir))
 	}
-	return list, nil
+	name := filepath.Base(abs)
+	if dir == "." {
+		name = "library"
+	}
+	return folder{dir: dir, abs: abs, name: name}
 }
 
 func fileExists(path string) bool {
@@ -154,6 +139,13 @@ func (f folder) usesGSX() bool {
 	return err == nil && bytes.Contains(mod, []byte("gsxhq/gsx/cmd/gsx"))
 }
 
+// servesWorkers reports whether f's module serves through workers.Serve,
+// which a TinyGo build needs to run as a Worker.
+func (f folder) servesWorkers() bool {
+	mod, err := os.ReadFile(filepath.Join(f.dir, "go.mod"))
+	return err == nil && bytes.Contains(mod, []byte("structpages/workers "))
+}
+
 // cleanGenerated deletes the code structpages-gen wrote in f.
 func (f folder) cleanGenerated() {
 	f.walk(func(path string) {
@@ -164,16 +156,13 @@ func (f folder) cleanGenerated() {
 	})
 }
 
-// cleanOnInterrupt deletes the generated code in list if the run is
-// interrupted, as it would when the run ends.
-func cleanOnInterrupt(list []folder) {
+// onInterrupt runs cleanup and exits if the run is interrupted (Ctrl-C).
+func onInterrupt(cleanup func()) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		<-c
-		for _, f := range list {
-			f.cleanGenerated()
-		}
+		cleanup()
 		os.Exit(130)
 	}()
 }
@@ -243,11 +232,23 @@ func repoRoot() (string, bool) {
 	}
 }
 
+// gsxGenerate regenerates f's gsx output, from scratch when noCache is set.
+func gsxGenerate(f folder, noCache bool) error {
+	args := []string{"tool", "gsx", "generate", "-q"}
+	if noCache {
+		args = append(args, "-no-cache")
+	}
+	if out, err := run(f.dir, "go", append(args, ".")...); err != nil {
+		return fmt.Errorf("gsx generate: %w\n%s", err, out)
+	}
+	return nil
+}
+
 // staleGSX regenerates f's gsx output from scratch and returns the committed
 // .x.go files that changed.
 func staleGSX(f folder) ([]string, error) {
-	if out, err := run(f.dir, "go", "tool", "gsx", "generate", "-q", "-no-cache", "."); err != nil {
-		return nil, fmt.Errorf("gsx generate: %w\n%s", err, out)
+	if err := gsxGenerate(f, true); err != nil {
+		return nil, err
 	}
 	out, err := run(f.dir, "git", "status", "--porcelain", "--", ".")
 	if err != nil {

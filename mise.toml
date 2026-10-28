@@ -18,28 +18,45 @@ golangci-lint = "2"
 # ---- The library: its test suite three ways ---------------------------------------------------------------------
 
 [tasks.test]
-description = "The library's tests, reflect, with the race detector (CI's Test job)."
-run = "go test -race ./..."
+description = "The library's tests, reflect, with the race detector (CI's Test job): how many passed, and any it skips."
+quiet = true
+run = "mise run _library reflect"
 
 [tasks."test:generated"]
-description = "The library's tests, generated: generate the code, then test reading it instead of reflect (CI's Tables build)."
-run = [
-  "go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...",
-  "go test -tags structpages_tables ./...",
-]
+description = """The library's tests, generated: generate the code, then test reading it instead of reflect (CI's Tables \
+build): how many passed, and every test it skips, with why."""
+quiet = true
+run = "mise run _library generated"
 
 [tasks."test:tinygo"]
-description = """The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job), then what TinyGo still \
-skips, and why (mostly routing: tinygo-org/net#55)."""
+description = """The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job): how many passed, and every \
+test it skips, with why (mostly routing: tinygo-org/net#55)."""
+quiet = true
+run = "mise run _library tinygo"
+
+[tasks._library]
+description = "The library's tests one way: the result per package, the count, every skipped test with why, any failure."
+hide = true
+quiet = true
 shell = "bash -c"
+usage = '''arg "<way>" help="reflect, generated or tinygo"'''
 run = '''
-out=$(scripts/tinygo-test.sh -v 2>&1); code=$?
+case "$usage_way" in
+  reflect) out=$(go test -race -count=1 -v ./... 2>&1); code=$? ;;
+  generated)
+    go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./... 2> >(grep -v 'structpages-gen: warning' >&2)
+    out=$(go test -count=1 -tags structpages_tables -v ./... 2>&1); code=$? ;;
+  tinygo) out=$(scripts/tinygo-test.sh -v 2>&1); code=$? ;;
+  *) echo "the way is reflect, generated or tinygo, not $usage_way" >&2; exit 2 ;;
+esac
 grep -E '^(ok|FAIL)[[:space:]]' <<<"$out"
 # A skipped test's reason is its first log line, printed after its "=== RUN".
 skips=$(awk '/^=== RUN/ { cur = $3; next }
   /^[[:space:]]*--- SKIP: / { print "  " $3 ": " why[$3]; next }
   cur != "" && !(cur in why) && !/^[[:space:]]*--- / && !/^(PASS|FAIL|ok)/ { l = $0; sub(/^[[:space:]]+/, "", l); why[cur] = l }' <<<"$out")
-echo; echo "TinyGo skips $(grep -c . <<<"$skips") tests:"; echo "$skips"
+passed=$(grep -cE '^[[:space:]]*--- PASS' <<<"$out"); failed=$(grep -cE '^[[:space:]]*--- FAIL' <<<"$out")
+echo; echo "$usage_way: $passed passed, $(grep -c . <<<"$skips") skipped, $failed failed"
+if [ -n "$skips" ]; then echo "skipped:"; echo "$skips"; fi
 if [ $code -ne 0 ]; then echo; grep -A12 -E '^[[:space:]]*--- FAIL' <<<"$out" | head -60; fi
 exit $code
 '''

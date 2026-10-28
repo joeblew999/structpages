@@ -75,8 +75,10 @@ jobs:
           sudo dpkg -i tinygo_0.43.0_amd64.deb
 
       - name: Run tests as TinyGo builds them
-        # The same script runs locally: scripts/tinygo-test.sh
-        run: scripts/tinygo-test.sh
+        # Locally, mise run test does the same, as its static-worker column.
+        run: |
+          go run -C tools/static ./cmd/structpages-static generate -C "$PWD" -test ./...
+          tinygo test ./...
 
   format:
     name: Format

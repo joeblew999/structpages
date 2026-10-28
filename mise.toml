@@ -29,9 +29,20 @@ run = [
 ]
 
 [tasks."test:tinygo"]
-description = """The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job). With -v it shows what TinyGo \
-still skips, and why (mostly routing: tinygo-org/net#55)."""
-run = "scripts/tinygo-test.sh"
+description = """The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job), then what TinyGo still \
+skips, and why (mostly routing: tinygo-org/net#55)."""
+shell = "bash -c"
+run = '''
+out=$(scripts/tinygo-test.sh -v 2>&1); code=$?
+grep -E '^(ok|FAIL)[[:space:]]' <<<"$out"
+# A skipped test's reason is its first log line, printed after its "=== RUN".
+skips=$(awk '/^=== RUN/ { cur = $3; next }
+  /^[[:space:]]*--- SKIP: / { print "  " $3 ": " why[$3]; next }
+  cur != "" && !(cur in why) && !/^[[:space:]]*--- / && !/^(PASS|FAIL|ok)/ { l = $0; sub(/^[[:space:]]+/, "", l); why[cur] = l }' <<<"$out")
+echo; echo "TinyGo skips $(grep -c . <<<"$skips") tests:"; echo "$skips"
+if [ $code -ne 0 ]; then echo; grep -A12 -E '^[[:space:]]*--- FAIL' <<<"$out" | head -60; fi
+exit $code
+'''
 
 [tasks."test:servemux"]
 description = """servemux/'s tests (Go 1.26's ServeMux, which TinyGo apps mount on), with Go, including that it answers \
@@ -319,12 +330,12 @@ description = "The library's benchmarks, reflect (PERFORMANCE.md)."
 run = "go test -run NoTest -bench . -benchmem ."
 
 [tasks."bench:compare"]
-description = """The library's benchmarks three ways, compared with benchstat, into BENCH-COMPARE.GENERATED.md. \
-BENCH picks benchmarks (default all), COUNT the runs of each (default 6), BENCHTIME each run's length (default 200ms)."""
+description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
+BENCH-COMPARE.GENERATED.md."""
 shell = "bash -c"
 run = '''
 set -euo pipefail
-flags=(-run NoTest -bench "${BENCH:-.}" -benchmem -count "${COUNT:-6}" -benchtime "${BENCHTIME:-200ms}")
+flags=(-run NoTest -bench . -benchmem -count 6 -benchtime 200ms)
 quiet() { "$@" 2> >(grep -v 'structpages-gen: warning' >&2); }
 echo "running reflect..."; reflect=$(go test "${flags[@]}" .)
 echo "running generated..."; quiet go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...
@@ -344,7 +355,7 @@ cat > BENCH-COMPARE.GENERATED.md <<EOF
 
 Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ).
 $(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$reflect" | sed -n 's/^cpu: //p').
-BENCH=${BENCH:-.} COUNT=${COUNT:-6} BENCHTIME=${BENCHTIME:-200ms}.
+Every benchmark, 6 runs of 200ms each.
 
 \`\`\`
 $result
@@ -354,9 +365,8 @@ echo "wrote BENCH-COMPARE.GENERATED.md"
 '''
 
 [tasks."bench:examples"]
-description = """Every example's BenchmarkCheck (its recorded GETs) three ways, compared with benchstat, into the \
-example's own BENCH.GENERATED.md. One example: example:<name>:bench. COUNT the runs of each (default 6), BENCHTIME \
-each run's length (default 200ms)."""
+description = """Every example's BenchmarkCheck (its recorded GETs) three ways, in-process and as served, into the \
+example's own BENCH.GENERATED.md. One example: example:<name>:bench."""
 quiet = true
 run = '''
 for d in examples/*/; do
@@ -366,7 +376,8 @@ done
 '''
 
 [tasks._bench]
-description = "examples/<name>'s BenchmarkCheck three ways, compared with benchstat, into its BENCH.GENERATED.md."
+description = """examples/<name>'s BenchmarkCheck three ways, in-process and as served (tinygo: WebAssembly in \
+workerd), compared with benchstat, into its BENCH.GENERATED.md."""
 hide = true
 quiet = true
 shell = "bash -c"
@@ -377,18 +388,44 @@ d="examples/$usage_name/"; name=$usage_name
 if ! grep -qs 'func BenchmarkCheck' "$d/check_test.go"; then
   echo "examples/$name has no BenchmarkCheck yet: add one to check_test.go, like examples/todo's" >&2; exit 2
 fi
-flags=(-run NoTest -bench BenchmarkCheck -benchmem -count "${COUNT:-6}" -benchtime "${BENCHTIME:-200ms}")
+flags=(-run NoTest -bench BenchmarkCheck -benchmem -count 6 -benchtime 200ms)
 gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
 if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
-echo "== $name: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
-echo "== $name: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_tables "${flags[@]}" .)
-echo "== $name: tinygo..."; gen -tags tinygo
+
+# In-process: each way's own test binary calls the handler directly.
+echo "== $name, in-process: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
+echo "== $name, in-process: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_tables "${flags[@]}" .)
+echo "== $name, in-process: tinygo..."; gen -tags tinygo
 # TinyGo prints no -N CPU suffix or goos/pkg/cpu lines, and 0 for every allocs/op, so those are left out.
 tinygo=$(cd "$d" && tinygo test "${flags[@]}" . | sed -E 's/[[:space:]]+0 allocs\/op//')
 result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$reflect") generated=<(echo "$generated") tinygo=<(echo "$tinygo"))
 echo "$result"
+
+# As served: each way started as its example:<name>[:way] task serves it, on :8080, and timed over local HTTP by
+# one standard Go client (CHECK_URL), so all three pay the same network cost. Times only: allocations would be the
+# client's.
+served() {
+  if lsof -ti tcp:8080 >/dev/null; then echo "port 8080 is in use: stop what is on it first" >&2; exit 1; fi
+  mise run _example "$name" "$1" >/dev/null 2>&1 &
+  curl -s -o /dev/null --retry-connrefused --retry 300 --retry-delay 1 --max-time 400 http://localhost:8080/ ||
+    { echo "examples/$name, $1: the server never answered" >&2; exit 1; }
+  (cd "$d" && CHECK_URL=http://localhost:8080 go test -run NoTest -bench BenchmarkCheck -count 6 -benchtime 200ms .)
+  lsof -ti tcp:8080 | xargs kill 2>/dev/null || true
+  wait 2>/dev/null || true
+  while lsof -ti tcp:8080 >/dev/null; do sleep 0.2; done
+}
+served_result="(not served under TinyGo: examples/$name has no serve_js.go yet)"
+echo "== $name, served: reflect..."; s_reflect=$(served reflect)
+echo "== $name, served: generated..."; s_generated=$(served generated)
+if [ -f "$d/serve_js.go" ]; then
+  echo "== $name, served: tinygo, in workerd..."; s_tinygo=$(served tinygo)
+  wasm="$(du -k "$d/worker.generated/app.wasm" | cut -f1) KB"
+  served_result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$s_reflect") generated=<(echo "$s_generated") tinygo=<(echo "$s_tinygo"))
+fi
+echo "$served_result"
+
 cat > "$d/BENCH.GENERATED.md" <<EOF
-<!-- Generated by \`mise run bench:examples\`. Do not edit: run it again. -->
+<!-- Generated by \`mise run bench:examples\` or \`mise run example:$name:bench\`. Do not edit: run it again. -->
 
 # $name: benchmarks, three ways
 
@@ -396,14 +433,27 @@ BenchmarkCheck (check_test.go) times each GET that $name's check recorded (testd
 
 - reflect: standard Go, structpages reading methods through reflect
 - generated: standard Go, reading generated code instead (-tags structpages_tables)
-- tinygo: TinyGo, which reads the generated code too; it reports no allocs/op
+- tinygo: TinyGo, which reads the generated code too
 
 Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ).
-$(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$reflect" | sed -n 's/^cpu: //p').
-COUNT=${COUNT:-6} BENCHTIME=${BENCHTIME:-200ms}.
+$(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$reflect" | sed -n 's/^cpu: //p'), workerd $(workerd --version 2>/dev/null | cut -d' ' -f2).
+6 runs of 200ms each.
+
+## In-process
+
+Each way's test binary calls the app's handler directly (TinyGo's natively, and it reports no allocs/op).
 
 \`\`\`
 $result
+\`\`\`
+
+## As served
+
+Each way served on :8080 as its example:$name task serves it (tinygo: ${wasm:-no} WebAssembly in workerd, what
+Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
+
+\`\`\`
+$served_result
 \`\`\`
 EOF
 echo "wrote ${d}BENCH.GENERATED.md"

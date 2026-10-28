@@ -37,6 +37,11 @@ import (
 // UpdateEnv set to 1 makes Crawl record the responses instead of comparing.
 const UpdateEnv = "CHECK_UPDATE"
 
+// URLEnv set to an app's address (http://localhost:8080) makes Bench send its
+// requests there instead of to the handler: to time the app as served, in
+// workerd for a TinyGo build.
+const URLEnv = "CHECK_URL"
+
 // maxRequests stops a crawl that keeps finding new URLs.
 const maxRequests = 500
 
@@ -110,6 +115,9 @@ func Crawl(t testing.TB, h http.Handler, file string) {
 // iteration different, so they are left out.
 func Bench(b *testing.B, h http.Handler, file string) {
 	b.Helper()
+	if u := os.Getenv(URLEnv); u != "" {
+		h = remote(b, u)
+	}
 	data, err := os.ReadFile(file)
 	if err != nil {
 		b.Fatalf("check: %v; record it first (mise run examples:record)", err)

@@ -49,8 +49,12 @@ var variants = []string{
 // the build started, timed to its first answer. A build names a variant of
 // the way's build (static-worker-plain), timed served and started only.
 func bench(args []string) int {
-	if len(args) == 1 && args[0] == "floor" {
-		if err := benchFloors(newFolder(".")); err != nil {
+	if len(args) == 1 && (args[0] == "floor" || args[0] == "cloudflare") {
+		step := benchFloors
+		if args[0] == "cloudflare" {
+			step = benchCloudflare
+		}
+		if err := step(newFolder(".")); err != nil {
 			fmt.Fprintf(os.Stderr, "structpages-dev: %v\n", err)
 			return 1
 		}
@@ -58,7 +62,8 @@ func bench(args []string) int {
 	}
 	if len(args) < 1 || len(args) > 2 || !slices.Contains(ways, args[0]) {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev bench dynamic|static|static-worker [build]\n"+
-			"       structpages-dev bench floor")
+			"       structpages-dev bench floor\n"+
+			"       structpages-dev bench cloudflare")
 		return 2
 	}
 	way, build := args[0], args[0]
@@ -181,6 +186,11 @@ func timeServed(f folder, way, build string) (string, error) {
 // of servedTime, each a line in the go test -bench format benchstat reads,
 // with the time per request and the server process's CPU per request.
 func timeServer(f folder, name string, s *server, reads []e2e.Read) (string, error) {
+	return timeServerRuns(f, name, s, reads, servedRuns, servedTime)
+}
+
+// timeServerRuns is timeServer with runs runs of each.
+func timeServerRuns(f folder, name string, s *server, reads []e2e.Read, runs int, each time.Duration) (string, error) {
 	if werr := waitUp(s, time.Minute); werr != nil {
 		return "", fmt.Errorf("%s, %s: %w", f.dir, name, werr)
 	}
@@ -207,13 +217,13 @@ func timeServer(f folder, name string, s *server, reads []e2e.Read) (string, err
 				return "", gerr
 			}
 		}
-		for range servedRuns {
+		for range runs {
 			cpu0, cerr := cpuTime(pid)
 			if cerr != nil {
 				return "", cerr
 			}
 			n, begin := 0, time.Now()
-			for time.Since(begin) < servedTime {
+			for time.Since(begin) < each {
 				if gerr := get(); gerr != nil {
 					return "", gerr
 				}
@@ -361,6 +371,12 @@ func servedCPU(file string) (medians map[string]float64, pages []string, err err
 	if err != nil {
 		return nil, nil, err
 	}
+	medians, pages = servedCPUOf(data)
+	return medians, pages, nil
+}
+
+// servedCPUOf is servedCPU of a served file's contents.
+func servedCPUOf(data []byte) (medians map[string]float64, pages []string) {
 	runs := map[string][]float64{}
 	line := regexp.MustCompile(`^BenchmarkServed/(\S+)\s+\d+\s+\d+ ns/op\s+(\d+) cpu-ns/op`)
 	for _, l := range strings.Split(string(data), "\n") {
@@ -382,7 +398,7 @@ func servedCPU(file string) (medians map[string]float64, pages []string, err err
 			medians[page] = (rs[len(rs)/2-1] + rs[len(rs)/2]) / 2
 		}
 	}
-	return medians, pages, nil
+	return medians, pages
 }
 
 // inShort is the report's first table: for each page, each way's build
@@ -401,17 +417,7 @@ func (r *benchReport) inShort() string {
 			pages = p
 		}
 	}
-	// Each page as its recording names it.
-	labels := map[string]string{}
-	if reads, err := e2e.Reads(filepath.Join(r.folder.dir, "testdata", "e2e.generated.txt")); err == nil {
-		for i := range reads {
-			read := &reads[i]
-			labels[read.Name] = "GET " + read.Path
-			if read.Header.Get("HX-Request") != "" {
-				labels[read.Name] += " (htmx)"
-			}
-		}
-	}
+	labels := r.pageLabels()
 	var b strings.Builder
 	b.WriteString("| page | CPU per request |")
 	for _, way := range r.present {
@@ -441,6 +447,22 @@ func (r *benchReport) inShort() string {
 		}
 	}
 	return b.String()
+}
+
+// pageLabels are the folder's pages as its recording names them, by their
+// benchmark names: GET /, and (htmx) for a partial.
+func (r *benchReport) pageLabels() map[string]string {
+	labels := map[string]string{}
+	if reads, err := e2e.Reads(filepath.Join(r.folder.dir, "testdata", "e2e.generated.txt")); err == nil {
+		for i := range reads {
+			read := &reads[i]
+			labels[read.Name] = "GET " + read.Path
+			if read.Header.Get("HX-Request") != "" {
+				labels[read.Name] += " (htmx)"
+			}
+		}
+	}
+	return labels
 }
 
 // workerBuild says what a Worker build is: its app.wasm's size, raw and
@@ -521,6 +543,9 @@ func (r *benchReport) write(dynamic string) error {
 			"CPU.\n\n")
 		b.WriteString(short)
 		b.WriteString("\n")
+	}
+	if cf := cloudflareSummary(f.name, filepath.Join(r.dir, "cloudflare.txt"), r.pageLabels()); cf != "" {
+		b.WriteString("## On Cloudflare\n\n" + cf + "\n")
 	}
 	fmt.Fprintf(&b, "## As served\n\nEach way's build served on :8080 as its example:%s:serve:<way> task "+
 		"serves it, and every "+

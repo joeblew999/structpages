@@ -4,8 +4,9 @@
 // the app's folder, build with it and serve what it built:
 //
 //	go tool structpages-workers tinygo -o build/tinygo
-//	go tool structpages-workers [-o dir] [-tinygoroot build/tinygo]
+//	go tool structpages-workers [-o dir] [-tinygoroot build/tinygo] [-name worker]
 //	workerd serve build/config.capnp
+//	wrangler deploy -c build/wrangler.jsonc
 //
 // Every default is the fastest Worker structpages knows how to build; each
 // flag turns one thing off, to measure what it saves (examples/todo's
@@ -24,6 +25,8 @@
 //     the glue worker.mjs replaced, with the collector it then needs).
 //   - -warm: the paths runtimes started while the module loads answer a GET
 //     of first (comma-separated, default /; none with -warm "").
+//   - -debug: keep TinyGo's debug information, function names among it, for a
+//     CPU profile to name them (a bigger app.wasm: not for deploying).
 //
 // tinygo makes a copy of the TinyGo installed (tinygo env TINYGOROOT) with
 // patches applied (each says what it changes and why). Its files are linked
@@ -33,7 +36,9 @@
 // The build writes into dir (default build), in this order: workers-go's
 // glue, wasm_exec.js and runtime.mjs (workers-assets-gen, at the version the
 // app's go.mod requires); its own worker.mjs over the one workers-go wrote,
-// and config.capnp, serving on :8080; then app.wasm (tinygo build -target
+// and config.capnp, serving on :8080, and wrangler.jsonc, which deploys the
+// same files to Cloudflare as the Worker -name (default structpages-, then
+// the app folder's name), its logs on; then app.wasm (tinygo build -target
 // wasm -no-debug, with the flags above); then build.txt, which says how it
 // was built.
 //
@@ -212,6 +217,9 @@ func main() {
 	gc := flag.String("gc", "leaking",
 		"TinyGo's -gc: leaking never collects (structpages' glue replaces a full runtime), precise is TinyGo's own")
 	stack := flag.String("stack", "64kb", "TinyGo's -stack-size, per goroutine")
+	debug := flag.Bool("debug", false, "keep TinyGo's debug information, function names among it, for a CPU profile")
+	cwd, _ := os.Getwd()
+	name := flag.String("name", "structpages-"+filepath.Base(cwd), "the Worker's name on Cloudflare, in wrangler.jsonc")
 	flag.Parse()
 	if *glueName != "structpages" && *glueName != "workers-go" {
 		fmt.Fprintln(os.Stderr, "structpages-workers: -glue is structpages or workers-go")
@@ -229,19 +237,23 @@ func main() {
 	if *warm != "" {
 		paths = strings.Split(*warm, ",")
 	}
-	if err := build(*out, *heap, *root, *glueName, paths, tinygoFlags{*opt, *gc, *stack}); err != nil {
+	if err := build(*out, *heap, *root, *glueName, *name, paths, tinygoFlags{*opt, *gc, *stack, *debug}); err != nil {
 		fmt.Fprintln(os.Stderr, "structpages-workers:", err)
 		os.Exit(1)
 	}
 }
 
-// tinygoFlags are what the build passes TinyGo's -opt, -gc and -stack-size.
-type tinygoFlags struct{ opt, gc, stack string }
+// tinygoFlags are what the build passes TinyGo's -opt, -gc and -stack-size,
+// and whether it keeps the debug information (-no-debug otherwise).
+type tinygoFlags struct {
+	opt, gc, stack string
+	debug          bool
+}
 
 // build builds the app in the working directory as a Worker into dir, with
 // the TinyGo at root, or the one installed when root is "", and glueName's
 // glue, its runtimes warmed with warm.
-func build(dir string, heapMB int, root, glueName string, warm []string, tf tinygoFlags) error {
+func build(dir string, heapMB int, root, glueName, name string, warm []string, tf tinygoFlags) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
@@ -249,7 +261,7 @@ func build(dir string, heapMB int, root, glueName string, warm []string, tf tiny
 	if err := run(nil, "go", "run", assetsGen, "-mode", "tinygo", "-o", dir); err != nil {
 		return err
 	}
-	if err := write(dir, glueName, warm); err != nil {
+	if err := write(dir, glueName, name, warm); err != nil {
 		return err
 	}
 	target := "wasm"
@@ -274,8 +286,11 @@ func build(dir string, heapMB int, root, glueName string, warm []string, tf tiny
 		env, tinygo = []string{"TINYGOROOT=" + abs}, root
 	}
 	wasm := filepath.Join(dir, "app.wasm")
-	if err := run(env, "tinygo", "build", "-o", wasm, "-target", target, "-no-debug",
-		"-opt="+tf.opt, "-gc="+tf.gc, "-stack-size="+tf.stack, "."); err != nil {
+	args := []string{"build", "-o", wasm, "-target", target, "-opt=" + tf.opt, "-gc=" + tf.gc, "-stack-size=" + tf.stack}
+	if !tf.debug {
+		args = append(args, "-no-debug")
+	}
+	if err := run(env, "tinygo", append(args, ".")...); err != nil {
 		return err
 	}
 	heap := fmt.Sprintf("%dMB", heapMB)
@@ -287,9 +302,10 @@ func build(dir string, heapMB int, root, glueName string, warm []string, tf tiny
 	return os.WriteFile(filepath.Join(dir, "build.txt"), []byte(how), 0o600)
 }
 
-// write writes this command's worker.mjs, glueName's, and config.capnp into
-// dir: worker.mjs with warm as the paths its runtimes warm with.
-func write(dir, glueName string, warm []string) error {
+// write writes this command's worker.mjs, glueName's, config.capnp and
+// wrangler.jsonc into dir: worker.mjs with warm as the paths its runtimes
+// warm with, wrangler.jsonc deploying it as the Worker name.
+func write(dir, glueName, name string, warm []string) error {
 	source := "worker.mjs"
 	if glueName == "workers-go" {
 		source = "worker-workers-go.mjs"
@@ -316,8 +332,26 @@ func write(dir, glueName string, warm []string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "config.capnp"), config, 0o600)
+	if werr := os.WriteFile(filepath.Join(dir, "config.capnp"), config, 0o600); werr != nil {
+		return werr
+	}
+	return os.WriteFile(filepath.Join(dir, "wrangler.jsonc"), []byte(fmt.Sprintf(wranglerConfig, name)), 0o600)
 }
+
+// wranglerConfig is wrangler.jsonc, for the Worker's name: the files
+// config.capnp gives workerd, uploaded as they are, and Workers Logs on, as
+// the Cloudflare benchmark reads the CPU each request took from them.
+const wranglerConfig = `// Written by structpages-workers: wrangler deploy -c wrangler.jsonc deploys it.
+{
+  "name": %q,
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "no_bundle": true,
+  "find_additional_modules": true,
+  "rules": [{ "type": "ESModule", "globs": ["**/*.mjs", "**/*.js"] }],
+  "observability": { "enabled": true }
+}
+`
 
 // patchTinyGo makes dir a copy of the TinyGo installed with patches applied,
 // unless it is one already. Its .patched file names the TinyGo and the

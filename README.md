@@ -190,6 +190,9 @@ does that one step: a test summary, a benchmark, a report or a server.
 | `mise run example:todo:test` / `example:todo:test:dynamic` / … | an example's tests, all its ways or one |
 | `mise run example:todo:serve:dynamic` / `example:todo:serve:static` / `example:todo:serve:static-worker` | serve an example's build on http://localhost:8080 (static-worker: WebAssembly in workerd) |
 | `mise run bench` / `example:todo:bench` | benchmarks, each way one at a time: in-process, and for an app served (the time and the server's CPU per request) and started; for an app, its two servers alone too (`bench:floor`), so each way's own CPU shows; todo's also builds its Worker with each trick turned off. Into that folder's `BENCH_GENERATED.md` ([the library's](./BENCH_GENERATED.md), [todo's](./examples/todo/BENCH_GENERATED.md)) |
+| `mise run example:todo:profile` | the quick loop for making the Worker faster, half a minute: its CPU per request in workerd, and a CPU profile of where it goes, `build/profile/static-worker.cpuprofile`, a flame graph in Chrome DevTools (Performance, Load profile) or speedscope.app, as `wrangler dev --inspect` gives |
+| `mise run cloudflare:login` | log wrangler in to your Cloudflare account, once: it opens Cloudflare's page in your browser, and wrangler keeps the login |
+| `mise run example:todo:deploy` / `example:todo:bench:cloudflare` / `example:todo:undeploy` | deploy todo's Worker to your account, time it there (the CPU Cloudflare logs for each request, read with `wrangler tail`, into the report), and remove it |
 | `mise run examples` / `bench:examples` | every example's tests / benchmarks |
 | `mise run generated:check` | fail if a generated file changed and isn't committed |
 | `mise run lint:examples` | structpages-lint (`tools/lint`) over every example |
@@ -235,8 +238,9 @@ noise). Its `app.wasm` is 574 KB gzipped, a fifth of Workers Free's 3 MB.
 alone, answering with no app, costs more (56 µs) than the whole Go server running todo (39 µs), and the Worker's own
 part, TinyGo's WebAssembly with the glue, is 22.8 µs against Go's 4–5 µs. TinyGo's code is slower than Go's even
 natively (15.2 µs against 4.7 µs in-process, with TinyGo's native collector), and slower again as WebAssembly in V8.
-On Cloudflare, workerd's own work is Cloudflare's: a Worker is billed for its own CPU, here about 0.02 ms a request,
-which Cloudflare's logs, in whole milliseconds, show as 0 ms, as they do a TypeScript Worker's (charter's own
-comparison, in its docs/self/benchmarks.md).
+On Cloudflare, workerd's own work is Cloudflare's: a Worker is billed for its own CPU, here about 0.02 ms a request.
+Deployed (`example:todo:bench:cloudflare`), every request Cloudflare logged took **0 ms of CPU**: its logs count whole
+milliseconds, so a page costs under one, as a TypeScript Worker's does in charter's own comparison (its
+docs/self/benchmarks.md), and as the Go server's 0.04 ms would.
 
 Where this stands and what comes next: [TINYGO-STRATEGY.md](./TINYGO-STRATEGY.md).

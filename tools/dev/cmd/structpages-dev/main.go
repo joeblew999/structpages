@@ -10,9 +10,12 @@
 //	structpages-dev test dynamic|static|static-worker
 //	structpages-dev bench dynamic|static|static-worker [build]
 //	structpages-dev bench floor
+//	structpages-dev bench cloudflare
 //	structpages-dev report
 //	structpages-dev serve dynamic|static|static-worker
 //	structpages-dev floor
+//	structpages-dev deploy
+//	structpages-dev profile
 //
 // It generates and builds nothing an app needs: mise.toml's generate and
 // build tasks do, and the tasks running structpages-dev depend on them, so the
@@ -31,7 +34,11 @@
 // own CPU, its build's less its server's. serve runs the folder's build for a
 // way, build/<way>, on :8080 until Ctrl-C: in workerd for static-worker.
 // floor serves the recorded pages with net/http, no app behind them, until
-// stopped: bench floor runs it.
+// stopped: bench floor runs it. deploy deploys the folder's static-worker
+// build to Cloudflare with wrangler, and bench cloudflare sends the deployed
+// Worker the recorded pages, reading the CPU Cloudflare logged for each with
+// wrangler tail. profile is the quick loop for making the Worker faster: its
+// CPU per request, and a CPU profile, a flame graph, of where it goes.
 package main
 
 import (
@@ -58,9 +65,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev test dynamic|static|static-worker\n"+
 			"       structpages-dev bench dynamic|static|static-worker [build]\n"+
 			"       structpages-dev bench floor\n"+
+			"       structpages-dev bench cloudflare\n"+
 			"       structpages-dev report\n"+
 			"       structpages-dev serve dynamic|static|static-worker\n"+
-			"       structpages-dev floor")
+			"       structpages-dev floor\n"+
+			"       structpages-dev deploy\n"+
+			"       structpages-dev profile")
 	}
 	flag.Parse()
 	r, ok := repoRoot()
@@ -84,6 +94,10 @@ func main() {
 		os.Exit(report(args))
 	case "floor":
 		os.Exit(floor(args))
+	case "deploy":
+		os.Exit(deploy(args))
+	case "profile":
+		os.Exit(profile(args))
 	default:
 		fmt.Fprintf(os.Stderr, "structpages-dev: unknown command %q\n", cmd)
 		flag.Usage()

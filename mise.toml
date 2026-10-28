@@ -23,6 +23,8 @@ go = "1.26"
 tinygo = "0.43.0"
 "aqua:WebAssembly/binaryen" = "133" # wasm-opt, for TinyGo's WebAssembly builds
 workerd = "1.20261019.1"            # Cloudflare's Workers runtime, to serve TinyGo builds locally
+node = "26"                         # for wrangler
+"npm:wrangler" = "4.147.0"          # Cloudflare's CLI: log in, deploy a Worker, follow its requests
 golangci-lint = "2"
 "go:golang.org/x/perf/cmd/benchstat" = "latest"
 
@@ -34,7 +36,7 @@ _.path = ["{{config_root}}/build/bin"]
 
 [tasks."tools:dev"]
 description = "Build structpages-dev (tools/dev) into build/bin, on the path for every task; again only when its code changes."
-sources = ["tools/dev/**/*.go", "tools/dev/go.mod", "e2e/*.go"]
+sources = ["tools/dev/**/*.go", "tools/dev/go.mod", "tools/dev/go.sum", "e2e/*.go"]
 outputs = ["build/bin/structpages-dev"]
 run = "go build -C tools/dev -o {{config_root}}/build/bin/structpages-dev ./cmd/structpages-dev"
 
@@ -45,6 +47,12 @@ Worker builds use. Made again only when mise.toml or structpages-workers changes
 sources = ["mise.toml", "tools/workers/cmd/structpages-workers/main.go"]
 outputs = ["build/tinygo/.patched"]
 run = "go run -C tools/workers ./cmd/structpages-workers tinygo -o {{config_root}}/build/tinygo"
+
+[tasks."cloudflare:login"]
+description = """Log wrangler in to your Cloudflare account, once, before a deploy: it opens Cloudflare's page in your \
+browser, and wrangler keeps the login itself (wrangler whoami says whose). No token passes through this repo."""
+raw = true
+run = "wrangler login"
 
 # ---- The library (the root folder): its tasks, one per step, in the order they run ---------------------------------
 #
@@ -1009,6 +1017,43 @@ depends = ["example:todo:build:static-worker-plain", "tools:dev"]
 wait_for = ["example:todo:build", "example:todo:bench:static-worker-no-leaking"]
 dir = "examples/todo"
 run = "structpages-dev bench static-worker static-worker-plain"
+
+# The quick loop for making the Worker faster, half a minute: profile builds the Worker with its function names kept,
+# serves it in workerd, times its CPU per request, then records a CPU profile through workerd's inspector, as
+# wrangler dev --inspect and Chrome's profiler do: build/profile/static-worker.cpuprofile is a flame graph in Chrome
+# DevTools (Performance, Load profile) or speedscope.app, and the functions the CPU went to are printed.
+
+[tasks."example:todo:build:static-worker-profile"]
+description = "todo: build its Worker as static-worker, with TinyGo's debug information kept for a profile's function names, into build/static-worker-profile/."
+depends = ["example:todo:generate", "tools:tinygo"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker-profile -tinygoroot ../../build/tinygo -debug"
+
+[tasks."example:todo:profile"]
+description = "todo: its Worker's CPU per request, and a CPU profile (a flame graph) of where it goes, into build/profile/."
+depends = ["example:todo:build:static-worker-profile", "tools:dev"]
+dir = "examples/todo"
+run = "structpages-dev profile"
+
+# On Cloudflare: deploy puts todo's static-worker build on your account (cloudflare:login first) as the Worker
+# structpages-todo, bench:cloudflare times it there and writes the report again with it, and undeploy removes it.
+
+[tasks."example:todo:deploy"]
+description = "todo: deploy its static-worker build to Cloudflare as the Worker structpages-todo (wrangler deploy), its URL into build/static-worker/deployed.txt."
+depends = ["example:todo:build:static-worker", "tools:dev"]
+dir = "examples/todo"
+run = "structpages-dev deploy"
+
+[tasks."example:todo:bench:cloudflare"]
+description = "todo: time its deployed Worker on Cloudflare, the CPU Cloudflare logged for each request read with wrangler tail, into build/bench/cloudflare.txt; then the report again."
+depends = ["example:todo:deploy", "tools:dev"]
+dir = "examples/todo"
+run = ["structpages-dev bench cloudflare", "structpages-dev report"]
+
+[tasks."example:todo:undeploy"]
+description = "todo: remove the Worker structpages-todo from Cloudflare (wrangler delete)."
+dir = "examples/todo"
+run = "wrangler delete -c build/static-worker/wrangler.jsonc"
 
 [tasks."example:todo:bench"]
 description = "todo: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."

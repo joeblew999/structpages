@@ -98,6 +98,22 @@ saves.
 - **`-stack`**: TinyGo's stack per goroutine (default 64kb, TinyGo's own; with stacks reused, its size costs nothing
   per request).
 
+### Measuring it
+
+In this repo, three mise tasks measure todo's Worker, each from the build its task makes:
+
+- `example:todo:profile`, the quick loop, half a minute: the Worker in workerd, its CPU per request, then a CPU
+  profile through workerd's inspector, as `wrangler dev --inspect` and Chrome's profiler give
+  ([Cloudflare's article](https://blog.cloudflare.com/profiling-your-workers-with-wrangler/)). It writes
+  `build/profile/static-worker.cpuprofile`, a flame graph in Chrome DevTools (Performance, Load profile) or
+  speedscope.app, and prints the functions the CPU went to. It profiles a build with TinyGo's debug information kept
+  (`structpages-workers -debug`), so the functions have their names.
+- `example:todo:bench`: every way, and the Worker built with each trick turned off, into the report.
+- `example:todo:bench:cloudflare`: the Worker deployed to your account (`cloudflare:login` first, `example:todo:deploy`
+  runs `wrangler deploy` with the `wrangler.jsonc` the build writes), and the CPU Cloudflare logs for each request,
+  read with `wrangler tail`. Cloudflare counts whole milliseconds, and the tail logs a sample of the requests, so
+  it is the check of what Cloudflare bills, not the loop to work in.
+
 structpages itself helps every way, not only the Worker: `URLFor` and `ID` work out a page type's route and a
 method's id once, from the page tree, which doesn't change after `Mount`, where they walked the tree on every call.
 

@@ -6,7 +6,7 @@
 - static: standard Go, methods known at compile time from generated code (-tags structpages_static)
 - static-worker: a Cloudflare Worker: TinyGo WebAssembly, static too, built with every one of structpages-workers' defaults
 
-Commit b84968c + uncommitted changes, 2026-10-28T15:23Z.
+Commit 06ac12c + uncommitted changes, 2026-10-28T16:05Z.
 go1.27.3 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
 
 ## In short
@@ -22,6 +22,22 @@ workerd's own work is Cloudflare's: a Worker is billed for its own CPU.
 | `GET /` | the build, served | 39.2 µs | 40.0 µs | 78.8 µs |
 |  | its server alone, no app | 35.1 µs | 35.1 µs | 56.0 µs |
 |  | **the way's own** | 4.1 µs | 4.9 µs | 22.8 µs |
+
+## On Cloudflare
+
+The static-worker build deployed at https://structpages-todo.gedw99.workers.dev (example:todo:deploy), timed 2026-10-28T16:05Z: each recorded page
+sent 50 times to warm its isolates, then 200 times, 1 at a time, 200 requests in all (example:todo:bench:cloudflare).
+The CPU and wall time are what Cloudflare logged for each request, in whole milliseconds: what it bills.
+wrangler tail, which reads them, logs a sample of the requests, so the table counts those it logged. The
+time at the client is mostly the network between this machine and Cloudflare.
+
+| page | requests logged | CPU, mean | CPU, median | CPU, 90th % | CPU, most | wall, median | at the client, median | runtimes |
+|---|---|---|---|---|---|---|---|---|
+| `GET /` | 13 | 0.00 ms | 0 ms | 0 ms | 0 ms | 0 ms | 13 ms | reused 13 |
+
+CPU per request, how many requests logged each:
+
+- `GET /`: 0 ms: 13
 
 ## As served
 

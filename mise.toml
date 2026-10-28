@@ -77,13 +77,6 @@ run = [
   "{{vars.structpages_static}} -C {{config_root}}/examples/html-template -test ./...", # 2. -> structpages_static.generated.go
 ]
 
-[tasks."example:htmx:generate"]
-description = "examples/htmx's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes."
-run = [
-  "go -C examples/htmx tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.structpages_static}} -C {{config_root}}/examples/htmx -test ./...", # 2. -> structpages_static.generated.go
-]
-
 [tasks."example:htmx-render-target:generate"]
 description = "examples/htmx-render-target's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes."
 run = [
@@ -118,6 +111,135 @@ if [ -n "$changed" ]; then
 fi
 echo "Every generated file is committed."
 '''
+
+# ---- examples/htmx: its tasks, one per step, in the order they run ---------------------------------------------------
+#
+# Each task runs in examples/htmx, after the tasks it depends on:
+#   generate:gsx -> generate:structpages-static -> generate:e2e
+#     -> test:dynamic, test:static, test:static-worker
+#     -> build:dynamic       -> serve:dynamic
+#     -> build:static        -> serve:static
+#     -> build:static-worker -> serve:static-worker
+#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+# Builds go in examples/htmx/build/ (gitignored). `mise tasks deps example:htmx:serve:static` prints a chain.
+# The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
+# log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
+
+[tasks."example:htmx:generate:gsx"]
+description = "htmx: gsx makes the .x.go files."
+dir = "examples/htmx"
+run = "go tool gsx generate"
+
+[tasks."example:htmx:generate:structpages-static"]
+description = "htmx: structpages-static generate makes structpages_static.generated.go."
+depends = ["example:htmx:generate:gsx"]
+dir = "examples/htmx"
+run = "go tool structpages-static generate"
+
+[tasks."example:htmx:generate:e2e"]
+description = "htmx: the e2e test records htmx's answers into testdata/e2e.generated.txt."
+depends = ["example:htmx:generate:structpages-static"]
+dir = "examples/htmx"
+run = "go test -update"
+
+[tasks."example:htmx:generate"]
+description = "htmx: all three generate tasks."
+depends = ["example:htmx:generate:e2e"]
+
+[tasks."example:htmx:test:dynamic"]
+description = "htmx: test it, dynamic."
+depends = ["example:htmx:generate", "tools:dev"]
+dir = "examples/htmx"
+run = "structpages-dev test dynamic"
+
+[tasks."example:htmx:test:static"]
+description = "htmx: test it, static."
+depends = ["example:htmx:generate", "tools:dev"]
+dir = "examples/htmx"
+run = "structpages-dev test static"
+
+[tasks."example:htmx:test:static-worker"]
+description = "htmx: test it, static-worker."
+depends = ["example:htmx:generate", "tools:dev"]
+dir = "examples/htmx"
+run = "structpages-dev test static-worker"
+
+[tasks."example:htmx:test"]
+description = "htmx: test it all three ways."
+depends = ["example:htmx:test:dynamic", "example:htmx:test:static", "example:htmx:test:static-worker"]
+
+[tasks."example:htmx:build:dynamic"]
+description = "htmx: build it, dynamic, into build/dynamic."
+depends = ["example:htmx:generate"]
+dir = "examples/htmx"
+run = "go build -o build/dynamic ."
+
+[tasks."example:htmx:serve:dynamic"]
+description = "htmx: serve its dynamic build on :8080 until Ctrl-C."
+depends = ["example:htmx:build:dynamic", "tools:dev"]
+dir = "examples/htmx"
+raw = true
+run = "structpages-dev serve dynamic"
+
+[tasks."example:htmx:build:static"]
+description = "htmx: build it, static, into build/static."
+depends = ["example:htmx:generate"]
+dir = "examples/htmx"
+run = "go build -tags structpages_static -o build/static ."
+
+[tasks."example:htmx:serve:static"]
+description = "htmx: serve its static build on :8080 until Ctrl-C."
+depends = ["example:htmx:build:static", "tools:dev"]
+dir = "examples/htmx"
+raw = true
+run = "structpages-dev serve static"
+
+[tasks."example:htmx:build:static-worker"]
+description = "htmx: build it, static-worker: a Worker (TinyGo WebAssembly and its glue), into build/static-worker/."
+depends = ["example:htmx:generate"]
+dir = "examples/htmx"
+run = "go tool structpages-workers -o build/static-worker"
+
+[tasks."example:htmx:serve:static-worker"]
+description = "htmx: serve its static-worker build in workerd on :8080 until Ctrl-C."
+depends = ["example:htmx:build:static-worker", "tools:dev"]
+dir = "examples/htmx"
+raw = true
+run = "structpages-dev serve static-worker"
+
+[tasks."example:htmx:build"]
+description = "htmx: build it all three ways."
+depends = ["example:htmx:build:dynamic", "example:htmx:build:static", "example:htmx:build:static-worker"]
+
+# The bench tasks time one way at a time, after every build: wait_for waits for a task only if it is running, so
+# bench:static alone runs just itself.
+
+[tasks."example:htmx:bench:dynamic"]
+description = "htmx: time it, dynamic: in-process, then its build served, into build/bench/."
+depends = ["example:htmx:build:dynamic", "tools:dev"]
+wait_for = ["example:htmx:build"]
+dir = "examples/htmx"
+run = "structpages-dev bench dynamic"
+
+[tasks."example:htmx:bench:static"]
+description = "htmx: time it, static: in-process, then its build served, into build/bench/."
+depends = ["example:htmx:build:static", "tools:dev"]
+wait_for = ["example:htmx:build", "example:htmx:bench:dynamic"]
+dir = "examples/htmx"
+run = "structpages-dev bench static"
+
+[tasks."example:htmx:bench:static-worker"]
+description = "htmx: time it, static-worker: in-process, then its build served in workerd, into build/bench/."
+depends = ["example:htmx:build:static-worker", "tools:dev"]
+wait_for = ["example:htmx:build", "example:htmx:bench:static"]
+dir = "examples/htmx"
+run = "structpages-dev bench static-worker"
+
+[tasks."example:htmx:bench"]
+description = "htmx: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
+depends = ["example:htmx:build", "example:htmx:bench:dynamic", "example:htmx:bench:static", "example:htmx:bench:static-worker"]
+dir = "examples/htmx"
+run = "structpages-dev report"
 
 # ---- examples/simple: its tasks, one per step, in the order they run -------------------------------------------------
 #
@@ -393,12 +515,11 @@ run = "{{vars.dev}} test ."
 [tasks.examples]
 description = """Every example's tests three ways, as test does for the library: a line each, and "no tests" for an \
 example with none yet. examples/todo alone: example:todo:test."""
-depends = ["example:simple:test", "example:todo:test", "examples:generate"]
+depends = ["example:htmx:test", "example:simple:test", "example:todo:test", "examples:generate"]
 quiet = true
 run = [
   "{{vars.dev}} test examples/blog",
   "{{vars.dev}} test examples/html-template",
-  "{{vars.dev}} test examples/htmx",
   "{{vars.dev}} test examples/htmx-render-target",
   "{{vars.dev}} test examples/url-validation",
 ]
@@ -434,20 +555,6 @@ depends = ["example:html-template:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/html-template static"
-
-[tasks."example:htmx:serve:dynamic"]
-description = "Serve examples/htmx on :8080, dynamic."
-depends = ["example:htmx:generate"]
-raw = true
-quiet = true
-run = "{{vars.dev}} serve examples/htmx dynamic"
-
-[tasks."example:htmx:serve:static"]
-description = "Serve examples/htmx on :8080, static."
-depends = ["example:htmx:generate"]
-raw = true
-quiet = true
-run = "{{vars.dev}} serve examples/htmx static"
 
 [tasks."example:htmx-render-target:serve:dynamic"]
 description = "Serve examples/htmx-render-target on :8080, dynamic."
@@ -489,7 +596,7 @@ run = "{{vars.dev}} bench ."
 [tasks."bench:examples"]
 description = """Every example with benchmarks (examples/todo, so far), three ways, in-process and as served, each into \
 its own BENCH_GENERATED.md, as bench does for the library. examples/todo alone: example:todo:bench."""
-depends = ["example:simple:bench", "example:todo:bench"]
+depends = ["example:htmx:bench", "example:simple:bench", "example:todo:bench"]
 
 [tasks."lint:examples"]
 description = "structpages-lint (tools/lint) over every example but lint-misuse, whose misuses are deliberate."
@@ -511,13 +618,12 @@ exit $fail
 [tasks."ci:go"]
 description = """Everything CI checks on standard Go: fmt, vet, lint, generated:check, then the library and every \
 example built and tested the dynamic way, as test and examples do."""
-depends = ["fmt", "vet", "lint", "generated:check", "example:simple:test:dynamic", "example:todo:test:dynamic"]
+depends = ["fmt", "vet", "lint", "generated:check", "example:htmx:test:dynamic", "example:simple:test:dynamic", "example:todo:test:dynamic"]
 quiet = true
 run = [
   "{{vars.dev}} test -ways dynamic .",
   "{{vars.dev}} test -ways dynamic examples/blog",
   "{{vars.dev}} test -ways dynamic examples/html-template",
-  "{{vars.dev}} test -ways dynamic examples/htmx",
   "{{vars.dev}} test -ways dynamic examples/htmx-render-target",
   "{{vars.dev}} test -ways dynamic examples/lint-misuse",
   "{{vars.dev}} test -ways dynamic examples/url-validation",

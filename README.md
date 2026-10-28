@@ -164,7 +164,7 @@ two implementations, picked by build tag:
 | Build | Implementation | Methods come from |
 |---|---|---|
 | standard Go (default) | `methods_dynamic.go` | `reflect`, at run time, as before: nothing changes for Go users |
-| TinyGo, or Go with `-tags structpages_static` | `methods_static.go` | code generated ahead of time by `tools/gen` |
+| TinyGo, or Go with `-tags structpages_static` | `methods_static.go` | code generated ahead of time by `tools/static` |
 
 So structpages runs three ways: **dynamic** (standard Go, the default: methods found at run time with `reflect`),
 **static** (standard Go, methods known at compile time from the generated code) and **static-worker** (a Cloudflare
@@ -177,7 +177,7 @@ build for TinyGo and Workers, and what to remove once TinyGo catches up.
 
 **Running it.** Install [mise](https://mise.jdx.dev), which brings the Go, TinyGo and tool versions in `mise.toml`;
 `mise tasks` lists everything. Some files are made from others, in an order: gsx's `.x.go` from the templates, then
-`structpages generate`'s `structpages.generated.go` from the Go code, then an example's e2e recording from its dynamic build.
+`structpages-static generate`'s `structpages.generated.go` from the Go code, then an example's e2e recording from its dynamic build.
 Each folder's `generate` task makes them in that order, and every task on a folder runs its `generate` task first, so
 there is no order to remember; the top of `mise.toml` sets it out. The examples' generated files are committed, as
 upstream commits `.x.go`. The other tasks run `structpages-dev` (`tools/dev`) on one folder, the same steps every way.

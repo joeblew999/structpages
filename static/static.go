@@ -4,7 +4,7 @@
 // type's parameters and results, or name a function, and on the standard
 // toolchain with the structpages_static build tag.
 //
-// structpages generate writes a file into each package with pages
+// structpages-static generate writes a file into each package with pages
 // (structpages.generated.go) that fills it in at init, and structpages reads
 // it there instead of reflect. Nothing here is meant to be written by hand;
 // see the docs on generated code, and structpages' methods_static.go for

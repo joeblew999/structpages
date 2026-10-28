@@ -3,13 +3,13 @@
 #
 # structpages runs three ways, and most tasks come in threes:
 #   dynamic        standard Go, the default: structpages finds the app's methods at run time, with reflect
-#   static         standard Go, -tags structpages_static: they are known at compile time, from the code `structpages generate` writes
+#   static         standard Go, -tags structpages_static: they are known at compile time, from the code `structpages-static generate` writes
 #   static-worker  a Cloudflare Worker: TinyGo WebAssembly, static too
 #
 # THE ORDER. Some files are made from others, so an example's steps run in an order, each reading what the one
-# before wrote: 1 gsx (.gsx -> .x.go), 2 structpages (structpages generate -> structpages.generated.go), 3 record (the e2e test
+# before wrote: 1 gsx (.gsx -> .x.go), 2 structpages (structpages-static generate -> structpages.generated.go), 3 record (the e2e test
 # from the dynamic build -> testdata/e2e.generated.txt), 4 test, bench or serve (structpages-dev). examples/todo's
-# section below has each step as its own task (generate:gsx, generate:structpages, generate:e2e, then test, bench,
+# section below has each step as its own task (generate:gsx, generate:structpages-static, generate:e2e, then test, bench,
 # serve), each depending on the one before. The other examples' generate tasks
 # do their steps 1 and 2 in order until they get todo's shape.
 #
@@ -29,15 +29,15 @@ golangci-lint = "2"
 [vars]
 # structpages-dev from this repository, working in its root; the folder and what to do follow.
 dev = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}}"
-# structpages generate from this repository (step 2); -C, the folder, follows.
-gen = "go run -C tools/gen ./cmd/structpages generate"
+# structpages-static generate from this repository (step 2); -C, the folder, follows.
+structpages_static = "go run -C tools/static ./cmd/structpages-static generate"
 
 # ---- Generate: each folder's generated files, in THE ORDER above ---------------------------------------------------
 
 [tasks.generate]
 description = """The library's generated files (step 2), for its own tests' static and static-worker builds: gitignored. \
 test, bench, vet and lint run it first."""
-run = "{{vars.gen}} -C {{config_root}} -test ./..."
+run = "{{vars.structpages_static}} -C {{config_root}} -test ./..."
 
 [tasks."examples:generate"]
 description = "Every example's generate task: each example's generated files, in order."
@@ -56,47 +56,47 @@ depends = [
 description = "examples/blog's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
 run = [
   "go -C examples/blog tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.gen}} -C {{config_root}}/examples/blog -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/blog -test ./...", # 2. -> structpages.generated.go
 ]
 
 [tasks."example:html-template:generate"]
 description = "examples/html-template's generated file: structpages.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
 run = [
-  "{{vars.gen}} -C {{config_root}}/examples/html-template -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/html-template -test ./...", # 2. -> structpages.generated.go
 ]
 
 [tasks."example:htmx:generate"]
 description = "examples/htmx's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
 run = [
   "go -C examples/htmx tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.gen}} -C {{config_root}}/examples/htmx -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/htmx -test ./...", # 2. -> structpages.generated.go
 ]
 
 [tasks."example:htmx-render-target:generate"]
 description = "examples/htmx-render-target's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
 run = [
   "go -C examples/htmx-render-target tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.gen}} -C {{config_root}}/examples/htmx-render-target -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/htmx-render-target -test ./...", # 2. -> structpages.generated.go
 ]
 
 [tasks."example:lint-misuse:generate"]
 description = "examples/lint-misuse's generated files, in order: .x.go, then structpages.generated.go. Commit what changes. Never built the static way (its tests check the linter), but made like every example's."
 run = [
   "go -C examples/lint-misuse tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.gen}} -C {{config_root}}/examples/lint-misuse -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/lint-misuse -test ./...", # 2. -> structpages.generated.go
 ]
 
 [tasks."example:simple:generate"]
 description = "examples/simple's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
 run = [
   "go -C examples/simple tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.gen}} -C {{config_root}}/examples/simple -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/simple -test ./...", # 2. -> structpages.generated.go
 ]
 
 [tasks."example:url-validation:generate"]
 description = "examples/url-validation's generated file: structpages.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
 run = [
-  "{{vars.gen}} -C {{config_root}}/examples/url-validation -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/url-validation -test ./...", # 2. -> structpages.generated.go
 ]
 
 [tasks."generated:check"]
@@ -117,7 +117,7 @@ echo "Every generated file is committed."
 # ---- examples/todo: its tasks, one per step, in the order they run -----------------------------------------------
 #
 # Each task runs in examples/todo and depends on the one before it, so running one runs the steps before it first:
-#   generate:gsx -> generate:structpages -> generate:e2e -> test, bench, or serve:dynamic / :static / :static-worker
+#   generate:gsx -> generate:structpages-static -> generate:e2e -> test, bench, or serve:dynamic / :static / :static-worker
 # `mise tasks deps example:todo:test` prints the chain.
 
 [tasks."example:todo:generate:gsx"]
@@ -125,15 +125,15 @@ description = "todo: gsx makes the .x.go files."
 dir = "examples/todo"
 run = "go tool gsx generate"
 
-[tasks."example:todo:generate:structpages"]
-description = "todo: structpages generate makes structpages.generated.go."
+[tasks."example:todo:generate:structpages-static"]
+description = "todo: structpages-static generate makes structpages.generated.go."
 depends = ["example:todo:generate:gsx"]
 dir = "examples/todo"
-run = "go tool structpages generate"
+run = "go tool structpages-static generate"
 
 [tasks."example:todo:generate:e2e"]
 description = "todo: the e2e test records todo's answers into testdata/e2e.generated.txt."
-depends = ["example:todo:generate:structpages"]
+depends = ["example:todo:generate:structpages-static"]
 dir = "examples/todo"
 run = "go test -update"
 
@@ -356,28 +356,28 @@ run = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
 # module's js/wasm one, which TinyGo builds.
 [tasks.vet]
 depends = ["generate"]
-description = "go vet on the library, workers, tools/gen, tools/dev and tools/workers, each build too (CI's Format job)."
+description = "go vet on the library, workers, tools/static, tools/dev and tools/workers, each build too (CI's Format job)."
 run = [
   "go vet ./...",
   "go vet -tags structpages_static ./...",
   "go vet -tags tinygo ./...",
   "go vet -C workers ./...",
   "GOOS=js GOARCH=wasm go vet -C workers ./...",
-  "go vet -C tools/gen ./...",
+  "go vet -C tools/static ./...",
   "go vet -C tools/dev ./...",
   "go vet -C tools/workers ./...",
 ]
 
 [tasks.lint]
 depends = ["generate"]
-description = "golangci-lint on the library, workers, tools/gen, tools/dev and tools/workers, each build too (CI's Lint job)."
+description = "golangci-lint on the library, workers, tools/static, tools/dev and tools/workers, each build too (CI's Lint job)."
 run = [
   "golangci-lint run --timeout=5m",
   "golangci-lint run --timeout=5m --build-tags structpages_static",
   "golangci-lint run --timeout=5m --build-tags tinygo",
   "cd workers && golangci-lint run --timeout=5m",
   "cd workers && GOOS=js GOARCH=wasm golangci-lint run --timeout=5m",
-  "cd tools/gen && golangci-lint run --timeout=5m",
+  "cd tools/static && golangci-lint run --timeout=5m",
   "cd tools/dev && golangci-lint run --timeout=5m",
   "cd tools/workers && golangci-lint run --timeout=5m",
 ]

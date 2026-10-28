@@ -1,4 +1,4 @@
-module github.com/jackielii/structpages/tools/gen
+module github.com/jackielii/structpages/tools/static
 
 go 1.24.0
 

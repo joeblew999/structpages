@@ -23,8 +23,8 @@ TinyGo it is the only way.
 ## Generate the code
 
 ```bash
-go get -tool github.com/jackielii/structpages/tools/gen/cmd/structpages@latest
-go tool structpages generate ./...
+go get -tool github.com/jackielii/structpages/tools/static/cmd/structpages-static@latest
+go tool structpages-static generate ./...
 ```
 
 It writes `structpages.generated.go` into each package that declares pages, standalone components or request-arg
@@ -35,10 +35,10 @@ the static builds compile it (`//go:build tinygo || structpages_static`), so the
   fail if anything changed (this repository's examples do both). Or generate it in your build before compiling.
   Either way, run the generator again whenever a page's methods change.
 - Generate in order, each step reading what the one before wrote: `go tool gsx generate` first in gsx projects
-  (page components are methods in the generated `.x.go`), then structpages generate, then record an end-to-end test
+  (page components are methods in the generated `.x.go`), then structpages-static generate, then record an end-to-end test
   (the `e2e` package) if you have one.
 - Missing generated code fails at `Mount`, naming the type: `no generated methods for app.page; run go tool
-  structpages generate`. Code generated before a method was added doesn't fail there: the method isn't seen, and the
+  structpages-static generate`. Code generated before a method was added doesn't fail there: the method isn't seen, and the
   page fails when it uses it. An end-to-end test run the static way catches that.
 - If some files build only under TinyGo, or never under it, pass `-tags tinygo` so the code matches what TinyGo
   compiles.

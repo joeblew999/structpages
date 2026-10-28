@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// App patterns the generator (tools/gen) might not cover, each run the three
+// App patterns the generator (tools/static) might not cover, each run the three
 // ways (dynamic, static, static-worker) by the ordinary suite: whatever
 // dynamic does is what the others must do, so a pattern the generated code can't do
 // fails here (mise run test).

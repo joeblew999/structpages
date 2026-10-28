@@ -52,7 +52,7 @@ jobs:
           go-version: "1.25"
 
       - name: Generate the code
-        run: go run -C tools/gen ./cmd/structpages generate -C "$PWD" -test ./...
+        run: go run -C tools/static ./cmd/structpages-static generate -C "$PWD" -test ./...
 
       - name: Run tests without method reflection
         run: go test -tags structpages_static ./...
@@ -106,7 +106,7 @@ jobs:
           go vet -tags tinygo ./...
           go vet -C workers ./...
           GOOS=js GOARCH=wasm go vet -C workers ./...
-          go vet -C tools/gen ./...
+          go vet -C tools/static ./...
           go vet -C tools/dev ./...
           go vet -C tools/workers ./...
 
@@ -159,11 +159,11 @@ jobs:
           working-directory: workers
           args: --timeout=5m
 
-      - name: golangci-lint (tools/gen)
+      - name: golangci-lint (tools/static)
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
-          working-directory: tools/gen
+          working-directory: tools/static
           args: --timeout=5m
 
       - name: golangci-lint (tools/dev)
@@ -224,7 +224,7 @@ jobs:
       - name: Generate structpages code and check freshness
         working-directory: ./examples/${{ matrix.example }}
         run: |
-          go run -C ../../tools/gen ./cmd/structpages generate -C "$PWD" -test ./...
+          go run -C ../../tools/static ./cmd/structpages-static generate -C "$PWD" -test ./...
           if [ -n "$(git status --porcelain .)" ]; then
             echo "::error::committed structpages.generated.go files are stale — run mise run example:${{ matrix.example }}:generate and commit"
             git status --porcelain .

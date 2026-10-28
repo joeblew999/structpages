@@ -12,7 +12,7 @@ import (
 )
 
 // What structpages reads about functions and methods comes from the code
-// structpages generate writes (package static), because TinyGo can't: its reflect
+// structpages-static generate writes (package static), because TinyGo can't: its reflect
 // panics as unimplemented in Type.Method, MethodByName, In, Out and
 // Value.Call (https://github.com/tinygo-org/tinygo/issues/3862), and its
 // runtime.FuncForPC returns nil
@@ -22,7 +22,7 @@ import (
 //
 // When a TinyGo release has all of those, delete this file,
 // methods_static_test.go, cmpdiff_tinygo_test.go, package generated and
-// tools/gen, and drop the build constraints from
+// tools/static, and drop the build constraints from
 // methods_dynamic.go, methods_dynamic_test.go and cmpdiff_test.go (and the
 // staticBuild checks with them). It is safe when the suite passes under
 // `tinygo test` with no generated code.
@@ -32,7 +32,7 @@ import (
 func funcTable(t reflect.Type) *static.FuncType {
 	ft, ok := static.LookupFuncType(t)
 	if !ok {
-		panic(fmt.Sprintf("structpages: no generated code for function type %s; run go tool structpages generate", t))
+		panic(fmt.Sprintf("structpages: no generated code for function type %s; run go tool structpages-static generate", t))
 	}
 	return ft
 }
@@ -49,10 +49,10 @@ func funcCall(fn reflect.Value, in []reflect.Value) []reflect.Value {
 }
 
 // checkFuncType reports whether funcIn, funcOut and funcCall work for
-// functions of type t: whether structpages generate wrote code for it.
+// functions of type t: whether structpages-static generate wrote code for it.
 func checkFuncType(t reflect.Type) error {
 	if _, ok := static.LookupFuncType(t); !ok {
-		return fmt.Errorf("no generated code for function type %s; run go tool structpages generate", t)
+		return fmt.Errorf("no generated code for function type %s; run go tool structpages-static generate", t)
 	}
 	return nil
 }
@@ -72,7 +72,7 @@ func typeMethods(t reflect.Type) ([]reflect.Method, error) {
 		if embedded, ok := embeddedMethods(t); ok {
 			return embedded, nil
 		}
-		return nil, fmt.Errorf("no generated methods for %s; run go tool structpages generate", t)
+		return nil, fmt.Errorf("no generated methods for %s; run go tool structpages-static generate", t)
 	}
 	for _, m := range ms {
 		// structpages never calls a promoted method, and the generator

@@ -45,7 +45,7 @@ examples/todo/todo
 examples/htmx-render-target/htmx-render-target-example
 examples/lint-misuse/lint-misuse
 
-# Code structpages generate writes (named *.generated*.go) for this repo's own
+# Code structpages-static generate writes (named *.generated*.go) for this repo's own
 # tests (mise run generate; CI's Static build). The examples' is
 # committed instead, as their gsx output is.
 /structpages*.generated*.go

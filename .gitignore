@@ -55,3 +55,5 @@ examples/lint-misuse/lint-misuse
 # committed instead, as their gsx output is.
 /structpages*.generated*.go
 /internal/*/structpages*.generated*.go
+# wrangler's own cache (your account), wherever it runs
+.wrangler/

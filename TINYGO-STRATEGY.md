@@ -129,11 +129,11 @@ In order:
    method patterns but not escaped slashes.
 
    **Status: done for `todo`.** `workers/servemux` is Go 1.26's `ServeMux` as Go wrote it, with Go's tests; they pass
-   with Go and under TinyGo (`mise run test:workers`). `workers.NewMux` returns it in TinyGo builds and `net/http`'s
-   elsewhere, and `workers.Serve` serves on `net/http` or, in a Worker, through workerd; `todo` calls both, and
-   `tools/workers` writes the Worker's JavaScript glue. structpages itself is unchanged. `todo`'s check now
-   passes all three ways, and served in workerd its toggle and delete work. The other examples follow when they get
-   `todo`'s shape.
+   with Go and under TinyGo (`mise run test:workers`). `workers.NewMux` returns it in the generated and TinyGo builds
+   (so those two differ only in their compiler) and `net/http`'s in the reflect build. `workers.Serve` serves on
+   `net/http` or, in a Worker, through workerd. `todo` calls both, and `tools/workers` writes the Worker's JavaScript
+   glue. structpages itself is unchanged. `todo`'s check passes all three ways, and served in workerd its toggle and
+   delete work and its state is kept. The other examples follow when they get `todo`'s shape.
 3. **Run the TinyGo way where it will really run.** Serve each example's handler from `workerd`, locally, through
    workers-go (go-htmx4 pins workerd and TinyGo in mise for this). Then the checker can also crawl it over HTTP, and
    the WebAssembly's start-up time and size per request can be measured; for Workers those matter more than

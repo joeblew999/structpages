@@ -3,8 +3,10 @@
 // license that can be found in the LICENSE file.
 
 // Package servemux is net/http's ServeMux as of Go 1.26, for builds whose
-// net/http still routes like Go 1.21's: TinyGo's (tinygo-org/net#55). workers.NewMux
-// returns one in TinyGo builds, and net/http's elsewhere; structpages
+// net/http still routes like Go 1.21's: TinyGo's (tinygo-org/net#55).
+// workers.NewMux returns one in the builds that read generated code (TinyGo,
+// and the standard toolchain's structpages_tables build, so the two differ
+// only in their compiler), and net/http's in the reflect build; structpages
 // itself is unchanged.
 // Delete it once TinyGo's net/http routes Go 1.22 patterns.
 //

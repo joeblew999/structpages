@@ -6,12 +6,14 @@
 //	structpages.Mount(mux, index{}, "/", "App")
 //	workers.Serve(":8080", mux)
 //
-// On the standard toolchain that is net/http's ServeMux and ListenAndServe:
-// nothing here needs TinyGo or workerd. Under TinyGo, NewMux is servemux,
-// Go's own ServeMux (TinyGo's net/http can't route Go 1.22 patterns), and in
-// a Worker, Serve hands the app the requests workerd delivers, one Go runtime
-// serving all of them. A Worker also needs JavaScript glue next to its
-// app.wasm: tools/workers' structpages-workers command writes it.
+// In the reflect build that is net/http's ServeMux and ListenAndServe:
+// nothing here needs TinyGo or workerd. In the two builds that read generated
+// code, TinyGo and the standard toolchain with -tags structpages_tables,
+// NewMux is servemux, Go's own ServeMux (TinyGo's net/http can't route Go
+// 1.22 patterns), so they differ only in their compiler. In a Worker, Serve
+// hands the app the requests workerd delivers, one Go runtime serving all of
+// them. A Worker also needs JavaScript glue next to its app.wasm:
+// tools/workers' structpages-workers command writes it.
 package workers
 
 import "net/http"

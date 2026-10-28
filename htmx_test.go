@@ -333,7 +333,6 @@ func TestMatchComponentByTarget_CompactedID(t *testing.T) {
 // an HTMX request whose HX-Target is the page's own compacted detail id, must
 // render the Detail component — not fall back to Page.
 func TestHTMXv4RenderTarget_CompactedID(t *testing.T) {
-	requireMuxPatterns(t)
 	mux := http.NewServeMux()
 	sp, err := Mount(mux, &hxDeepRoot{}, "/", "App",
 		WithTargetSelector(HTMXv4RenderTarget))

@@ -46,7 +46,6 @@ func (extendedMultiReturnHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 }
 
 func TestExtendedServeHTTPWithExtraArgs(t *testing.T) {
-	requireMuxPatterns(t)
 	tests := []struct {
 		name           string
 		handler        any
@@ -162,7 +161,6 @@ func (wrongArgHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, missing
 
 // Test callMethod error scenarios
 func TestExtendedServeHTTPCallMethodError(t *testing.T) {
-	requireMuxPatterns(t)
 	type pages struct {
 		wrongArgHandler `route:"GET /wrong"`
 	}

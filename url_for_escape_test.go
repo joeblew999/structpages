@@ -208,23 +208,19 @@ func TestURLFor_requestValuesRoundTrip(t *testing.T) {
 		item escItemPage `route:"/items/{id} Item"`
 	}
 	for _, tt := range []struct {
-		name         string
-		opts         []Option
-		path         string
-		wantPath     string
-		want         decodedURL
-		escapedSlash bool
+		name     string
+		opts     []Option
+		path     string
+		wantPath string
+		want     decodedURL
 	}{
-		{name: "escaped request value", path: "/items/a%26b%2Fc%3Fd", escapedSlash: true,
+		{name: "escaped request value", path: "/items/a%26b%2Fc%3Fd",
 			want: decodedURL{Segments: []string{"items", "a&b/c?d"}, Query: url.Values{"q": {"A&B"}}}},
 		{name: "under WithURLPrefix", opts: []Option{WithURLPrefix("/admin")}, path: "/items/a%20b",
 			wantPath: "/admin/items/a%20b",
 			want:     decodedURL{Segments: []string{"admin", "items", "a b"}, Query: url.Values{"q": {"A&B"}}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.escapedSlash {
-				requireMuxEscapedSlash(t)
-			}
 			mux := http.NewServeMux()
 			if _, err := Mount(mux, &pages{}, "/", "Test", tt.opts...); err != nil {
 				t.Fatalf("Mount: %v", err)

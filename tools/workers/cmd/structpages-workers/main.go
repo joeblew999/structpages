@@ -4,7 +4,7 @@
 // the app's folder, build with it and serve what it built:
 //
 //	go tool structpages-workers tinygo -o build/tinygo
-//	go tool structpages-workers -tinygoroot build/tinygo [-o dir] [-heap MB]
+//	go tool structpages-workers -tinygoroot build/tinygo [-o dir] [-heap MB] [-warm paths] [-glue workers-go]
 //	workerd serve build/config.capnp
 //
 // tinygo makes a copy of the TinyGo installed (tinygo env TINYGOROOT) with
@@ -20,13 +20,19 @@
 // glue, wasm_exec.js and runtime.mjs (workers-assets-gen, at the version the
 // app's go.mod requires); its own worker.mjs over the one workers-go wrote,
 // and config.capnp, serving on :8080; then app.wasm (tinygo build -target
-// wasm -no-debug, with -tinygoroot's TinyGo, or the one installed without
-// it); then build.txt, which says how it was built. -heap is the
-// WebAssembly's starting heap, in MB (default 8; 0 is TinyGo's own), so an
-// ordinary request doesn't need a collection to find room. Its worker.mjs
-// starts one Go runtime per isolate and gives it every request, where
-// workers-assets-gen's starts one per request: main and Mount every time,
-// and nothing kept between requests.
+// wasm -no-debug -opt=z, the smallest code and the quickest build, with
+// -tinygoroot's TinyGo, or the one installed without it); then build.txt,
+// which says how it was built. -heap is the WebAssembly's starting heap, in
+// MB (default 8; 0 is TinyGo's own), so an ordinary request doesn't need a
+// collection to find room.
+//
+// worker.mjs keeps Go runtimes between requests, a pool of them, starts some
+// while the module loads, warmed with a GET of each of -warm's paths
+// (comma-separated, default /; none with -warm ""), and gives a request to
+// Go and takes its answer back in one call each: worker.mjs says how, and
+// the workers module's Serve is its Go side. -glue workers-go writes the
+// glue it replaced instead, one runtime kept, each request through
+// workers-go's own request path, to measure what worker.mjs saves.
 package main
 
 import (
@@ -39,11 +45,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
-//go:embed worker.mjs config.capnp
+//go:embed worker.mjs worker-workers-go.mjs config.capnp
 var glue embed.FS
+
+// warmLine is the line of worker.mjs that -warm's paths replace.
+const warmLine = `const warmPaths = ["/"]; // structpages-workers -warm`
 
 // gcPatch is the tinygo command's change to TinyGo's runtime source.
 var gcPatch = struct{ file, old, new string }{
@@ -65,16 +75,28 @@ func main() {
 	heap := flag.Int("heap", 8, "the WebAssembly's starting heap, in MB (0: TinyGo's own)")
 	root := flag.String("tinygoroot", "",
 		"the TinyGo to build with, as structpages-workers tinygo makes it (none: the one installed)")
+	warm := flag.String("warm", "/", "the paths runtimes started while the module loads warm with, comma-separated")
+	glueName := flag.String("glue", "structpages",
+		"the Worker's glue: structpages, or workers-go to measure what it saves")
 	flag.Parse()
-	if err := build(*out, *heap, *root); err != nil {
+	if *glueName != "structpages" && *glueName != "workers-go" {
+		fmt.Fprintln(os.Stderr, "structpages-workers: -glue is structpages or workers-go")
+		os.Exit(2)
+	}
+	var paths []string
+	if *warm != "" {
+		paths = strings.Split(*warm, ",")
+	}
+	if err := build(*out, *heap, *root, *glueName, paths); err != nil {
 		fmt.Fprintln(os.Stderr, "structpages-workers:", err)
 		os.Exit(1)
 	}
 }
 
 // build builds the app in the working directory as a Worker into dir, with
-// the TinyGo at root, or the one installed when root is "".
-func build(dir string, heapMB int, root string) error {
+// the TinyGo at root, or the one installed when root is "", and glueName's
+// glue, its runtimes warmed with warm.
+func build(dir string, heapMB int, root, glueName string, warm []string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
@@ -82,7 +104,7 @@ func build(dir string, heapMB int, root string) error {
 	if err := run(nil, "go", "run", assetsGen, "-mode", "tinygo", "-o", dir); err != nil {
 		return err
 	}
-	if err := write(dir); err != nil {
+	if err := write(dir, glueName, warm); err != nil {
 		return err
 	}
 	target := "wasm"
@@ -106,29 +128,47 @@ func build(dir string, heapMB int, root string) error {
 		env, tinygo = []string{"TINYGOROOT=" + abs}, root
 	}
 	wasm := filepath.Join(dir, "app.wasm")
-	if err := run(env, "tinygo", "build", "-o", wasm, "-target", target, "-no-debug", "."); err != nil {
+	if err := run(env, "tinygo", "build", "-o", wasm, "-target", target, "-no-debug", "-opt=z", "."); err != nil {
 		return err
 	}
 	heap := fmt.Sprintf("%dMB", heapMB)
 	if heapMB == 0 {
 		heap = "tinygo's own"
 	}
-	how := fmt.Sprintf("heap=%s tinygo=%s\n", heap, tinygo)
+	how := fmt.Sprintf("heap=%s tinygo=%s glue=%s warm=%s\n", heap, tinygo, glueName, strings.Join(warm, ","))
 	return os.WriteFile(filepath.Join(dir, "build.txt"), []byte(how), 0o600)
 }
 
-// write writes this command's worker.mjs and config.capnp into dir.
-func write(dir string) error {
-	for _, name := range []string{"worker.mjs", "config.capnp"} {
-		data, err := glue.ReadFile(name)
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
-			return err
-		}
+// write writes this command's worker.mjs, glueName's, and config.capnp into
+// dir: worker.mjs with warm as the paths its runtimes warm with.
+func write(dir, glueName string, warm []string) error {
+	source := "worker.mjs"
+	if glueName == "workers-go" {
+		source = "worker-workers-go.mjs"
 	}
-	return nil
+	worker, err := glue.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	if glueName == "structpages" {
+		quoted := make([]string, len(warm))
+		for i, p := range warm {
+			quoted[i] = strconv.Quote(p)
+		}
+		line := "const warmPaths = [" + strings.Join(quoted, ", ") + "]; // structpages-workers -warm"
+		if !bytes.Contains(worker, []byte(warmLine)) {
+			return errors.New("worker.mjs has no warm paths line to set")
+		}
+		worker = bytes.Replace(worker, []byte(warmLine), []byte(line), 1)
+	}
+	if werr := os.WriteFile(filepath.Join(dir, "worker.mjs"), worker, 0o600); werr != nil {
+		return werr
+	}
+	config, err := glue.ReadFile("config.capnp")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "config.capnp"), config, 0o600)
 }
 
 // patchTinyGo makes dir a copy of the TinyGo installed with gcPatch applied,

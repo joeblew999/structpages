@@ -36,10 +36,10 @@ func main() { workers.Serve(handler()) }
 ```
 
 Its ordinary `main` goes in a file built `!(js && wasm)`, with `http.ListenAndServe(":8080", handler())`, as
-`examples/todo`'s `main_server.go` and `main_worker.go` do. In a Worker `workers.Serve` hands the app every request,
-one Go runtime serving them all; workers-go's own `Serve` starts a new one per request, keeping nothing between them. The
-Worker also needs JavaScript glue and a workerd config next to its `app.wasm`. `structpages-workers` builds all of
-it, in the app's folder:
+`examples/todo`'s `main_server.go` and `main_worker.go` do. In a Worker `workers.Serve` takes the app's requests from
+the glue `structpages-workers` writes, `worker.mjs`, and keeps its Go runtime alive for the next one; workers-go's own
+`Serve` starts a new runtime per request, keeping nothing between them. The Worker also needs that glue and a workerd
+config next to its `app.wasm`. `structpages-workers` builds all of it, in the app's folder:
 
 ```bash
 go get -tool github.com/jackielii/structpages/tools/workers/cmd/structpages-workers@latest
@@ -49,11 +49,26 @@ workerd serve build/config.capnp
 ```
 
 In order, it writes workers-go's glue (`wasm_exec.js` and `runtime.mjs`, from `workers-assets-gen` at the version your
-`go.mod` requires), then its own `worker.mjs` over workers-go's, which starts one Go runtime per isolate, and a
-`config.capnp` serving on `:8080`, then `app.wasm` (`tinygo build -target wasm -no-debug`). In this repo,
+`go.mod` requires), then its own `worker.mjs` over workers-go's, and a `config.capnp` serving on `:8080`, then
+`app.wasm` (`tinygo build -target wasm -no-debug -opt=z`: the smallest code, and the quickest build). In this repo,
 `mise run example:todo:serve:static-worker` builds `examples/todo` that way into `build/static-worker/` and serves it.
 
-Two things make a request cheaper:
+What makes a request cheap, each measured on its own in
+[examples/todo's BENCH_GENERATED.md](../examples/todo/BENCH_GENERATED.md):
+
+- **The glue, `worker.mjs`**, with `workers.Serve` its Go side:
+  - Go runtimes kept between requests: a pool of up to four, a runtime serving one request at a time and kept only
+    when its answer ended normally and Go says its heap has room for another.
+  - Two runtimes started while the module loads, each answering a GET of `-warm`'s paths (default `/`) into nothing,
+    so a new isolate's first request finds one ready.
+  - One crossing into Go and one out: the request as two values (its method, URL and headers as lines, and its body),
+    the answer in one call. workers-go's own request path crosses some hundred times.
+  - TinyGo's sleeps rounded up to a whole millisecond, as Cloudflare's clock moves only by whole milliseconds
+    ([tinygo#5798](https://github.com/tinygo-org/tinygo/issues/5798)), and TinyGo's start-up seed taken from
+    `Math.random` while the module loads, when Cloudflare gives no crypto randomness.
+  - A request with the header `x-go-runtime` is told which kind of runtime answered it: new, warm or reused.
+
+  `-glue workers-go` writes the glue it replaced, to measure what it saves.
 
 - **A patched TinyGo** (`structpages-workers tinygo`, then `-tinygoroot`): TinyGo's runtime runs a full garbage
   collection whenever its scheduler goes idle once 32 finalizers were registered. Every JavaScript value Go holds

@@ -32,10 +32,11 @@ const (
 	startRuns  = 6
 )
 
-// variants are todo's other Worker builds, each without the patched TinyGo
-// (mise's tools:tinygo), the 8 MB starting heap, or both, so the report shows
-// what each saves; the static-worker build has both.
-var variants = []string{"static-worker-plain", "static-worker-heap", "static-worker-gcpatch"}
+// variants are todo's other Worker builds: static-worker-plain with none of
+// the three things the static-worker build has (the patched TinyGo, mise's
+// tools:tinygo; the 8 MB starting heap; structpages-workers' glue), the rest
+// with one each, so the report shows what each saves.
+var variants = []string{"static-worker-plain", "static-worker-heap", "static-worker-gcpatch", "static-worker-glue"}
 
 // bench is the bench command, one step: the current folder's benchmarks one
 // way, into build/bench/ for report to compare. In-process, then, for an
@@ -310,10 +311,11 @@ func workerBuild(dir string) string {
 var wayDescriptions = map[string]string{
 	"dynamic":               "standard Go, structpages finding the app's methods at run time, with reflect",
 	"static":                "standard Go, methods known at compile time from generated code (-tags structpages_static)",
-	"static-worker":         "a Cloudflare Worker, TinyGo WebAssembly, static too",
-	"static-worker-plain":   "the Worker as TinyGo ships: the TinyGo installed, its own heap (-heap 0)",
-	"static-worker-heap":    "the Worker with the 8 MB starting heap only: the TinyGo installed",
-	"static-worker-gcpatch": "the Worker with the patched TinyGo only, mise's tools:tinygo (-heap 0 -tinygoroot)",
+	"static-worker":         "a Cloudflare Worker, TinyGo WebAssembly, static too (all three, as every Worker build)",
+	"static-worker-plain":   "the Worker as TinyGo and workers-go ship (-heap 0 -glue workers-go)",
+	"static-worker-heap":    "with the 8 MB starting heap only (-glue workers-go)",
+	"static-worker-gcpatch": "with the patched TinyGo only, mise's tools:tinygo (-heap 0 -glue workers-go -tinygoroot)",
+	"static-worker-glue":    "with structpages-workers' glue only: one crossing, runtimes warmed and pooled (-heap 0)",
 }
 
 // benchReport is a folder's BENCH_GENERATED.md: benchstat's tables, and what
@@ -368,8 +370,8 @@ func (r *benchReport) write(dynamic string) error {
 		b.WriteString("\n## The Worker\n\n" + r.worker + "\n")
 	}
 	if r.variantsServed != "" {
-		b.WriteString("\nThe Worker built four ways, to show what the patched TinyGo and the starting heap each save, " +
-			"served and started as\nabove, compared with the first:\n\n")
+		b.WriteString("\nThe Worker built five ways, to show what the patched TinyGo, the starting heap and the glue " +
+			"each save, served\nand started as above, compared with the first, which has none of them:\n\n")
 		for _, v := range append(slices.Clone(variants), "static-worker") {
 			fmt.Fprintf(&b, "- %s: %s\n", v, wayDescriptions[v])
 		}

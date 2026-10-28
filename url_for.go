@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/jackielii/ctxkey"
@@ -125,7 +126,7 @@ func URLFor(ctx context.Context, page any, args ...any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path, err := formatPathSegments(ctx, pattern, args...)
+	path, err := formatPath(pc, urlParamsCtx.Value(ctx), pattern, args...)
 	if err != nil {
 		return "", fmt.Errorf("urlfor: %w", err)
 	}
@@ -163,11 +164,16 @@ func applyURLPrefix(prefix, path string) string {
 // using pre-extracted parameters from context if available.
 // For more sophisticated path parsing, see Go's standard library implementation
 // at go/src/net/http/pattern.go which handles edge cases like escaped braces.
+func formatPathSegments(ctx context.Context, pattern string, args ...any) (string, error) {
+	return formatPath(pcCtx.Value(ctx), urlParamsCtx.Value(ctx), pattern, args...)
+}
+
+// formatPath is formatPathSegments with ctx's parse context and URL
+// parameters (either may be nil) already looked up: URLFor has them.
 //
 //nolint:gocognit,gocyclo // This function handles multiple cases for flexible argument passing
-func formatPathSegments(ctx context.Context, pattern string, args ...any) (string, error) {
+func formatPath(pc *parseContext, params map[string]string, pattern string, args ...any) (string, error) {
 	// Mounted routes are parsed once at Mount; see cacheRouteSegments
-	pc := pcCtx.Value(ctx)
 	var segments []segment
 	var err error
 	if pc != nil {
@@ -190,7 +196,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 
 	// Try to use pre-extracted parameters from context if no args provided
 	if len(args) == 0 && len(indicies) > 0 {
-		if params := urlParamsCtx.Value(ctx); params != nil {
+		if params != nil {
 			// Pre-fill segments with context parameters
 			for _, idx := range indicies {
 				name := segments[idx].name
@@ -215,7 +221,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 	}
 
 	// Pre-fill segments with context parameters if available
-	if params := urlParamsCtx.Value(ctx); params != nil {
+	if params != nil {
 		for _, idx := range indicies {
 			name := segments[idx].name
 			if value, ok := params[name]; ok {
@@ -229,7 +235,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 		for _, idx := range indicies {
 			name := segments[idx].name
 			if value, ok := arg[name]; ok {
-				segments[idx].value = fmt.Sprint(value)
+				segments[idx].value = formatArg(value)
 				segments[idx].filled = true
 			}
 			// If value not in args map, it should keep the pre-filled value from context
@@ -247,41 +253,35 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			for i, arg := range args {
 				// Always override with provided args when count matches exactly
 				idx := indicies[i]
-				segments[idx].value = fmt.Sprint(arg)
+				segments[idx].value = formatArg(arg)
 				segments[idx].filled = true
 			}
 		case len(args)%2 == 0 && len(args) >= 2:
-			// Check if all even-indexed args are strings AND at least one matches a parameter name
+			// Check if all even-indexed args are strings AND at least one matches a parameter name.
+			// A route has a few parameters, so they are looked through, not put in maps.
 			isPairs := true
 			matchKey := false
-			paramNames := make(map[string]bool)
-			for _, idx := range indicies {
-				paramNames[segments[idx].name] = true
-			}
-
 			for i := 0; i < len(args); i += 2 {
 				key, ok := args[i].(string)
 				if !ok {
 					isPairs = false
 					break
 				}
-				if paramNames[key] {
-					matchKey = true
+				for _, idx := range indicies {
+					if segments[idx].name == key {
+						matchKey = true
+					}
 				}
 			}
 
 			// Only treat as key-value pairs if all even args are strings AND at least one matches
 			if isPairs && matchKey {
 				// If args are provided as key-value pairs, fill segments accordingly
-				m := make(map[string]any)
-				for i := 0; i < len(args); i += 2 {
-					key := args[i].(string)
-					m[key] = args[i+1] //nolint:gosec // G602 false positive: outer guard ensures len(args)%2 == 0, so i+1 < len(args)
-				}
 				for _, idx := range indicies {
 					name := segments[idx].name
-					if value, ok := m[name]; ok {
-						segments[idx].value = fmt.Sprint(value)
+					value, ok := pairValue(args, name)
+					if ok {
+						segments[idx].value = formatArg(value)
 						segments[idx].filled = true
 					} else if !segments[idx].filled {
 						// Only error if no value from context either
@@ -307,7 +307,7 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 			argIdx := 0
 			for _, idx := range indicies {
 				if !segments[idx].filled && argIdx < len(args) {
-					segments[idx].value = fmt.Sprint(args[argIdx])
+					segments[idx].value = formatArg(args[argIdx])
 					segments[idx].filled = true
 					argIdx++
 				}
@@ -316,6 +316,39 @@ func formatPathSegments(ctx context.Context, pattern string, args ...any) (strin
 	}
 
 	return joinSegments(segments), nil
+}
+
+// pairValue is the value paired with name in args, key/value pairs: the last
+// pair for name, as a map of the pairs would have it.
+func pairValue(args []any, name string) (any, bool) {
+	for i := len(args) - 2; i >= 0; i -= 2 {
+		if args[i].(string) == name {
+			return args[i+1], true
+		}
+	}
+	return nil, false
+}
+
+// formatArg is fmt.Sprint(v), without fmt for the types a URL's values most
+// often are: under TinyGo, fmt costs a URL more than the rest of it.
+func formatArg(v any) string {
+	switch v := v.(type) {
+	case string:
+		return v
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case uint32:
+		return strconv.FormatUint(uint64(v), 10)
+	}
+	return fmt.Sprint(v)
 }
 
 // joinSegments assembles the URL, escaping each placeholder's value for the

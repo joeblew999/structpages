@@ -36,6 +36,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -120,7 +121,8 @@ func Bench(b *testing.B, h http.Handler, file string) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	for _, r := range reads {
+	for i := range reads {
+		r := &reads[i]
 		b.Run(r.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			for range b.N {
@@ -139,7 +141,18 @@ type Read struct {
 	// with: htmx's, for a partial.
 	Path   string
 	Header http.Header
+	// Answer is what the app answered when it was recorded.
+	Answer Answer
 	request
+}
+
+// Answer is a recorded answer: its status, Content-Type and Location
+// headers, and body.
+type Answer struct {
+	Status      int
+	ContentType string
+	Location    string
+	Body        string
 }
 
 // Reads returns the requests in file that only read (its GETs), in order:
@@ -151,14 +164,28 @@ func Reads(file string) ([]Read, error) {
 	}
 	var reads []Read
 	for _, s := range sections(data) {
-		line, _, _ := strings.Cut(s, "\n")
+		line, rest, _ := strings.Cut(s, "\n")
 		req, ok := parseRequest(line)
 		if !ok || req.method != http.MethodGet {
 			continue
 		}
-		reads = append(reads, Read{Name: benchName(req), Path: req.path, Header: newRequest(req).Header, request: req})
+		reads = append(reads, Read{Name: benchName(req), Path: req.path, Header: newRequest(req).Header,
+			Answer: parseAnswer(rest), request: req})
 	}
 	return reads, nil
+}
+
+// parseAnswer reads an answer back as Crawl writes it: its status and
+// Content-Type, a Location line when it has one, then its body.
+func parseAnswer(s string) Answer {
+	line, body, _ := strings.Cut(s, "\n")
+	code, contentType, _ := strings.Cut(line, " ")
+	a := Answer{ContentType: contentType, Body: body}
+	a.Status, _ = strconv.Atoi(code)
+	if loc, rest, ok := strings.Cut(body, "\n"); ok && strings.HasPrefix(loc, "Location: ") {
+		a.Location, a.Body = strings.TrimPrefix(loc, "Location: "), rest
+	}
+	return a
 }
 
 // parseRequest reads a request back from its String form.

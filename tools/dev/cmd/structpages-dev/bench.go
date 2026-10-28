@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,11 +35,13 @@ const (
 	startRuns  = 6
 )
 
-// variants are todo's other Worker builds: static-worker-plain with none of
-// the three things the static-worker build has (the patched TinyGo, mise's
-// tools:tinygo; the 8 MB starting heap; structpages-workers' glue), the rest
-// with one each, so the report shows what each saves.
-var variants = []string{"static-worker-plain", "static-worker-heap", "static-worker-gcpatch", "static-worker-glue"}
+// variants are todo's other Worker builds: the static-worker build, which
+// has every one of structpages-workers' defaults, with one turned off each,
+// so the report shows what each saves, and static-worker-plain with none.
+var variants = []string{
+	"static-worker-no-patch", "static-worker-no-heap", "static-worker-no-glue",
+	"static-worker-no-opt", "static-worker-no-leaking", "static-worker-plain",
+}
 
 // bench is the bench command, one step: the current folder's benchmarks one
 // way, into build/bench/ for report to compare. In-process, then, for an
@@ -44,8 +49,16 @@ var variants = []string{"static-worker-plain", "static-worker-heap", "static-wor
 // the build started, timed to its first answer. A build names a variant of
 // the way's build (static-worker-plain), timed served and started only.
 func bench(args []string) int {
+	if len(args) == 1 && args[0] == "floor" {
+		if err := benchFloors(newFolder(".")); err != nil {
+			fmt.Fprintf(os.Stderr, "structpages-dev: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if len(args) < 1 || len(args) > 2 || !slices.Contains(ways, args[0]) {
-		fmt.Fprintln(os.Stderr, "usage: structpages-dev bench dynamic|static|static-worker [build]")
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev bench dynamic|static|static-worker [build]\n"+
+			"       structpages-dev bench floor")
 		return 2
 	}
 	way, build := args[0], args[0]
@@ -102,7 +115,8 @@ func benchWay(f folder, way string) (string, error) {
 	case "static":
 		args = append(args, "-tags", staticTag)
 	case "static-worker":
-		tool = "tinygo"
+		// The Worker's code is built for speed, as structpages-workers builds it.
+		tool, args = "tinygo", append(args, "-opt=2")
 	}
 	out, err := run(f.dir, tool, append(args, ".")...)
 	if err != nil {
@@ -115,11 +129,40 @@ func benchWay(f folder, way string) (string, error) {
 	return out, nil
 }
 
+// benchFloors is bench floor, one step: each floor served and timed as
+// timeServed times a build, into build/bench/.
+func benchFloors(f folder) error {
+	if f.name == "library" {
+		return errors.New("the library is no app: it has no recorded pages to serve")
+	}
+	reads, err := e2e.Reads(filepath.Join(f.dir, "testdata", "e2e.generated.txt"))
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(f.dir, "build", "bench")
+	if merr := os.MkdirAll(dir, 0o750); merr != nil {
+		return merr
+	}
+	for _, name := range floors {
+		fmt.Printf("%s, %s: served...\n", f.name, name)
+		s, serr := startFloor(f, name, reads)
+		if serr != nil {
+			return serr
+		}
+		served, terr := timeServer(f, name, s, reads)
+		s.stop()
+		if terr != nil {
+			return terr
+		}
+		if werr := os.WriteFile(filepath.Join(dir, name+"-served.txt"), []byte(served), 0o600); werr != nil {
+			return werr
+		}
+	}
+	return nil
+}
+
 // timeServed serves f's build and sends it every page its e2e test recorded
-// (e2e.Reads, what e2e.Bench times in-process) from one standard Go client,
-// the same for every way: for each page, servedRuns runs of servedTime, each
-// a line in the go test -bench format benchstat reads, with the time per
-// request and the server process's CPU per request.
+// (e2e.Reads, what e2e.Bench times in-process): timeServer.
 func timeServed(f folder, way, build string) (string, error) {
 	reads, err := e2e.Reads(filepath.Join(f.dir, "testdata", "e2e.generated.txt"))
 	if err != nil {
@@ -130,13 +173,22 @@ func timeServed(f folder, way, build string) (string, error) {
 		return "", err
 	}
 	defer s.stop()
+	return timeServer(f, build, s, reads)
+}
+
+// timeServer sends s, serving name, every page in reads from one standard Go
+// client, the same for every way and floor: for each page, servedRuns runs
+// of servedTime, each a line in the go test -bench format benchstat reads,
+// with the time per request and the server process's CPU per request.
+func timeServer(f folder, name string, s *server, reads []e2e.Read) (string, error) {
 	if werr := waitUp(s, time.Minute); werr != nil {
-		return "", fmt.Errorf("%s, %s: %w", f.dir, build, werr)
+		return "", fmt.Errorf("%s, %s: %w", f.dir, name, werr)
 	}
 	pid := s.cmd.Process.Pid
 	client := &http.Client{Timeout: time.Minute}
 	var out strings.Builder
-	for _, r := range reads {
+	for i := range reads {
+		r := &reads[i]
 		get := func() error {
 			req, rerr := http.NewRequest(http.MethodGet, "http://"+addr+r.Path, http.NoBody) //nolint:noctx // a local benchmark
 			if rerr != nil {
@@ -232,7 +284,7 @@ func report(args []string) int {
 	if len(present) == 0 {
 		fail(fmt.Errorf("no benchmark numbers in %s: run its bench tasks first", dir))
 	}
-	r := benchReport{folder: f, present: present}
+	r := benchReport{folder: f, dir: dir, present: present}
 	var err error
 	if r.inProcess, err = benchstat(dir, present, ".txt"); err != nil {
 		fail(err)
@@ -244,15 +296,20 @@ func report(args []string) int {
 		if r.started, err = benchstat(dir, present, "-start.txt"); err != nil {
 			fail(err)
 		}
+		if fileExists(filepath.Join(dir, floors[0]+"-served.txt")) {
+			if r.floors, err = benchstat(dir, floors, "-served.txt"); err != nil {
+				fail(err)
+			}
+		}
 		r.worker = workerBuild(filepath.Join(f.dir, "build", "static-worker"))
-		var builds []string
+		builds := []string{"static-worker"}
 		for _, v := range variants {
 			if fileExists(filepath.Join(dir, v+"-served.txt")) {
 				builds = append(builds, v)
 			}
 		}
-		if len(builds) > 0 {
-			builds = append(builds, "static-worker")
+		if len(builds) > 1 {
+			r.variants = builds
 			if r.variantsServed, err = benchstat(dir, builds, "-served.txt"); err != nil {
 				fail(err)
 			}
@@ -287,6 +344,105 @@ func benchstat(dir string, names []string, suffix string) (string, error) {
 	return strings.TrimRight(string(out), "\n"), nil
 }
 
+// benchReport is a folder's BENCH_GENERATED.md: benchstat's tables, and what
+// they compare.
+type benchReport struct {
+	folder                                     folder
+	dir                                        string
+	present, variants                          []string
+	inProcess, served, started, floors, worker string
+	variantsServed, variantsStarted            string
+}
+
+// servedCPU is a served file's CPU per request for each page, the median of
+// its runs, in µs, and its pages in order.
+func servedCPU(file string) (medians map[string]float64, pages []string, err error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, nil, err
+	}
+	runs := map[string][]float64{}
+	line := regexp.MustCompile(`^BenchmarkServed/(\S+)\s+\d+\s+\d+ ns/op\s+(\d+) cpu-ns/op`)
+	for _, l := range strings.Split(string(data), "\n") {
+		m := line.FindStringSubmatch(l)
+		if m == nil {
+			continue
+		}
+		if _, seen := runs[m[1]]; !seen {
+			pages = append(pages, m[1])
+		}
+		ns, _ := strconv.ParseFloat(m[2], 64)
+		runs[m[1]] = append(runs[m[1]], ns/1e3)
+	}
+	medians = map[string]float64{}
+	for page, rs := range runs {
+		slices.Sort(rs)
+		medians[page] = rs[len(rs)/2]
+		if len(rs)%2 == 0 {
+			medians[page] = (rs[len(rs)/2-1] + rs[len(rs)/2]) / 2
+		}
+	}
+	return medians, pages, nil
+}
+
+// inShort is the report's first table: for each page, each way's build
+// served, its server with no app, and the difference, the way's own CPU per
+// request; or "" without the floors' numbers.
+func (r *benchReport) inShort() string {
+	cpu := map[string]map[string]float64{}
+	var pages []string
+	for _, name := range append(slices.Clone(r.present), floors...) {
+		m, p, err := servedCPU(filepath.Join(r.dir, name+"-served.txt"))
+		if err != nil {
+			return ""
+		}
+		cpu[name] = m
+		if pages == nil {
+			pages = p
+		}
+	}
+	// Each page as its recording names it.
+	labels := map[string]string{}
+	if reads, err := e2e.Reads(filepath.Join(r.folder.dir, "testdata", "e2e.generated.txt")); err == nil {
+		for i := range reads {
+			read := &reads[i]
+			labels[read.Name] = "GET " + read.Path
+			if read.Header.Get("HX-Request") != "" {
+				labels[read.Name] += " (htmx)"
+			}
+		}
+	}
+	var b strings.Builder
+	b.WriteString("| page | CPU per request |")
+	for _, way := range r.present {
+		b.WriteString(" " + way + " |")
+	}
+	b.WriteString("\n|---|---|" + strings.Repeat("---|", len(r.present)) + "\n")
+	us := func(v float64) string { return fmt.Sprintf(" %.1f µs |", v) }
+	for _, page := range pages {
+		rows := []struct {
+			label string
+			value func(way string) float64
+		}{
+			{"the build, served", func(way string) float64 { return cpu[way][page] }},
+			{"its server alone, no app", func(way string) float64 { return cpu[floorOf(way)][page] }},
+			{"**the way's own**", func(way string) float64 { return cpu[way][page] - cpu[floorOf(way)][page] }},
+		}
+		for i, row := range rows {
+			name := ""
+			if i == 0 {
+				name = "`" + cmp.Or(labels[page], page) + "`"
+			}
+			fmt.Fprintf(&b, "| %s | %s |", name, row.label)
+			for _, way := range r.present {
+				b.WriteString(us(row.value(way)))
+			}
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
 // workerBuild says what a Worker build is: its app.wasm's size, raw and
 // gzipped, and how structpages-workers built it (its build.txt), or "" when
 // there is none.
@@ -302,29 +458,29 @@ func workerBuild(dir string) string {
 	how, _ := os.ReadFile(filepath.Join(dir, "build.txt"))
 	return fmt.Sprintf("static-worker's app.wasm is %d KB, %d KB gzipped: Cloudflare allows 3 MB gzipped on "+
 		"Workers Free,\n"+
-		"10 MB on Workers Paid. structpages-workers built it with %s.",
+		"10 MB on Workers Paid. structpages-workers built it with its defaults: %s.",
 		len(wasm)/1024, gz.Len()/1024, strings.TrimSpace(string(how)))
 }
 
-// wayDescriptions say what each way, and each of todo's other Worker builds,
-// is, for BENCH_GENERATED.md.
+// wayDescriptions say what each way, floor and Worker build is, for
+// BENCH_GENERATED.md.
 var wayDescriptions = map[string]string{
-	"dynamic":               "standard Go, structpages finding the app's methods at run time, with reflect",
-	"static":                "standard Go, methods known at compile time from generated code (-tags structpages_static)",
-	"static-worker":         "a Cloudflare Worker, TinyGo WebAssembly, static too (all three, as every Worker build)",
-	"static-worker-plain":   "the Worker as TinyGo and workers-go ship (-heap 0 -glue workers-go)",
-	"static-worker-heap":    "with the 8 MB starting heap only (-glue workers-go)",
-	"static-worker-gcpatch": "with the patched TinyGo only, mise's tools:tinygo (-heap 0 -glue workers-go -tinygoroot)",
-	"static-worker-glue":    "with structpages-workers' glue only: one crossing, runtimes warmed and pooled (-heap 0)",
-}
-
-// benchReport is a folder's BENCH_GENERATED.md: benchstat's tables, and what
-// they compare.
-type benchReport struct {
-	folder                             folder
-	present                            []string
-	inProcess, served, started, worker string
-	variantsServed, variantsStarted    string
+	"dynamic": "standard Go, structpages finding the app's methods at run time, with reflect",
+	"static":  "standard Go, methods known at compile time from generated code (-tags structpages_static)",
+	"static-worker": "a Cloudflare Worker: TinyGo WebAssembly, static too, built with every one of " +
+		"structpages-workers' defaults",
+	"floor-go": "Go's net/http, as the dynamic and static builds serve, answering the recorded pages with no app",
+	"floor-workerd": "workerd, as the static-worker build is served, running a JavaScript Worker answering the " +
+		"recorded pages",
+	"static-worker-no-patch": "the TinyGo installed, not mise's tools:tinygo with its runtime patched " +
+		"(-tinygoroot installed)",
+	"static-worker-no-heap": "TinyGo's own starting heap, not 8 MB (-heap 0)",
+	"static-worker-no-glue": "workers-go's glue, one runtime kept for good, each request through workers-go's " +
+		"request path; so TinyGo's collector too (-glue workers-go -gc precise)",
+	"static-worker-no-opt":     "TinyGo's smallest code, not its fastest (-opt z)",
+	"static-worker-no-leaking": "TinyGo's own collector, not the leaking one (-gc precise)",
+	"static-worker-plain": "none of them, the Worker as TinyGo and workers-go ship " +
+		"(-tinygoroot installed -heap 0 -glue workers-go -opt z -gc precise)",
 }
 
 // write writes the report, dynamic the first way's in-process output, for
@@ -349,30 +505,52 @@ func (r *benchReport) write(dynamic string) error {
 	}
 	fmt.Fprintf(&b, "\n%s\n%s, %s%s, workerd %s.\n\n", stamp(), version("go", "version"), version("tinygo", "version"),
 		cpu, version("workerd", "--version"))
-	b.WriteString("## In-process\n\nEach way's test binary calls the code directly, 6 runs of 200ms each " +
-		"(TinyGo's natively, and it reports no allocs/op).\n\n")
-	fence(r.inProcess)
 	if f.name == "library" {
+		b.WriteString("## In-process\n\nEach way's test binary calls the code directly, 6 runs of 200ms each " +
+			"(TinyGo's natively, and it reports no allocs/op).\n\n")
+		fence(r.inProcess)
 		b.WriteString("\nThe library is no app: nothing to serve or start.\n")
 		return r.save(b.String())
 	}
-	fmt.Fprintf(&b, "\n## As served\n\nEach way's build served on :8080 as its example:%s:serve:<way> task "+
+	if short := r.inShort(); short != "" {
+		b.WriteString("## In short\n\nThe server's CPU for one request, the median of 6 runs (As served, below). " +
+			"Each way runs on a\nserver of its own: Go's net/http for dynamic and static, workerd for " +
+			"static-worker. Each server's CPU\nanswering the same page with no app behind it is below the build's " +
+			"(The servers alone, below), and\nthe difference is the way's own: what structpages and the app cost on " +
+			"top of the server. On Cloudflare,\nworkerd's own work is Cloudflare's: a Worker is billed for its own " +
+			"CPU.\n\n")
+		b.WriteString(short)
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "## As served\n\nEach way's build served on :8080 as its example:%s:serve:<way> task "+
 		"serves it, and every "+
 		"page its e2e test\nrecorded sent to it by one standard Go client for %v at a time, %d runs, after %v to "+
 		"warm it: the time\na request takes (sec/op), and the server's CPU for it (cpu-sec/op), the operating system's "+
-		"count of the\nserver process's CPU before and after, divided by the requests. CPU is what Cloudflare bills a "+
-		"Worker for and\nlimits.\n\n", f.name, servedTime, servedRuns, servedWarm)
+		"count of the\nserver process's CPU before and after, divided by the requests.\n\n",
+		f.name, servedTime, servedRuns, servedWarm)
 	fence(r.served)
+	if r.floors != "" {
+		b.WriteString("\n## The servers alone\n\nThe two servers, each answering the recorded pages with no app " +
+			"behind them (example:" + f.name + ":bench:floor),\nserved and timed as above:\n\n")
+		for _, name := range floors {
+			fmt.Fprintf(&b, "- %s: %s\n", name, wayDescriptions[name])
+		}
+		b.WriteString("\n")
+		fence(r.floors)
+	}
+	b.WriteString("\n## In-process\n\nEach way's test binary calls the code directly, 6 runs of 200ms each " +
+		"(TinyGo's natively at -opt=2, not\nas WebAssembly, with its native collector; it reports no allocs/op).\n\n")
+	fence(r.inProcess)
 	fmt.Fprintf(&b, "\n## Starting\n\nEach way's build started %d times: the time from starting it to its first answer "+
-		"to GET /.\n\n", startRuns)
+		"to GET /,\nworkerd's own start included.\n\n", startRuns)
 	fence(r.started)
 	if r.worker != "" {
 		b.WriteString("\n## The Worker\n\n" + r.worker + "\n")
 	}
 	if r.variantsServed != "" {
-		b.WriteString("\nThe Worker built five ways, to show what the patched TinyGo, the starting heap and the glue " +
-			"each save, served\nand started as above, compared with the first, which has none of them:\n\n")
-		for _, v := range append(slices.Clone(variants), "static-worker") {
+		b.WriteString("\nThe Worker built with one of structpages-workers' defaults turned off each, and with none, to " +
+			"show what\neach saves, served and started as above, compared with static-worker, which has them all:\n\n")
+		for _, v := range r.variants {
 			fmt.Fprintf(&b, "- %s: %s\n", v, wayDescriptions[v])
 		}
 		b.WriteString("\n")

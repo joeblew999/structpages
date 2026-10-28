@@ -22,9 +22,13 @@ type methodInfo struct {
 	isFunction       bool // true for standalone functions (not methods)
 }
 
-// Global cache for method info to avoid repeated runtime.FuncForPC calls
-// Key: funcKey (uintptr), Value: *methodInfo
-var methodInfoCache sync.Map
+// Global cache for method info to avoid repeated runtime.FuncForPC calls,
+// by funcKey. A map of its own type, not a sync.Map: under TinyGo a key of
+// type any is hashed and compared through reflect.
+var methodInfoCache = struct {
+	sync.RWMutex
+	m map[uintptr]*methodInfo
+}{m: make(map[uintptr]*methodInfo)}
 
 // extractMethodInfo extracts method information from either:
 // - Unbound method expressions: Type.Method or (*Type).Method
@@ -40,8 +44,11 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 
 	// Check cache first
 	key := funcKey(v)
-	if cached, ok := methodInfoCache.Load(key); ok {
-		return cached.(*methodInfo), nil
+	methodInfoCache.RLock()
+	cached, ok := methodInfoCache.m[key]
+	methodInfoCache.RUnlock()
+	if ok {
+		return cached, nil
 	}
 
 	// Cache miss - extract method info
@@ -112,7 +119,9 @@ func extractMethodInfo(methodExpr any) (*methodInfo, error) {
 	}
 
 	// Cache the result before returning
-	methodInfoCache.Store(key, info)
+	methodInfoCache.Lock()
+	methodInfoCache.m[key] = info
+	methodInfoCache.Unlock()
 	return info, nil
 }
 

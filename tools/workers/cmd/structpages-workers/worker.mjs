@@ -5,13 +5,15 @@
 //
 //   - Go runtimes are kept between requests. A runtime serves one request at a time; one that finds none
 //     waiting starts its own, so nothing waits for another request. A runtime is kept for the next request
-//     only when its answer ended normally and Go says its heap has room for another (the binding's full,
-//     set before the collector would run); at most maxWaiting are kept.
+//     only when its answer ended normally and Go says its heap has room for another (full, with its
+//     answer, false before the collector would have to run); at most maxWaiting are kept.
 //   - maxWarm runtimes start while the module loads, each answering a GET of warmPaths into nothing, so a
 //     new isolate's first request finds one ready, its code already run once.
-//   - A request goes to Go in one call, as two values (the binding's serve: its method, URL and headers as
-//     lines, and its body), and its answer comes back in one (respond), where workers-go's own request path
-//     crosses between JavaScript and Go some hundred times.
+//   - A request goes to Go as numbers only: its method, URL and headers, as lines, and its body are written
+//     into the runtime's memory, and Go's structpages_serve is called with their lengths; then TinyGo's
+//     scheduler is run, which answers it. The answer comes back the same way, in one call (respond) that
+//     reads it out of that memory. No JavaScript value is made for either, where workers-go's own request
+//     path crosses between JavaScript and Go some hundred times, and a js.FuncOf call a dozen.
 //   - TinyGo's sleeps are rounded up to a whole millisecond: on Cloudflare the clock moves only by whole
 //     milliseconds, so a shorter sleep never ends (tinygo-org/tinygo#5798).
 //   - While the module loads Cloudflare gives no crypto randomness, so TinyGo's runtime, which takes its
@@ -26,15 +28,22 @@ const warmPaths = ["/"]; // structpages-workers -warm
 const maxWarm = 2; // runtimes started while the module loads
 const maxWaiting = 4; // runtimes kept for the next request; each holds its Go heap
 
-// Every sleep TinyGo asks for, rounded up to a whole millisecond.
+// Every sleep TinyGo asks for, rounded up to a whole millisecond. While serve gives Go a request, TinyGo's
+// call for its scheduler to run as soon as it can is not needed: serve runs it straight after.
 const TinyGo = globalThis.Go;
 globalThis.Go = class extends TinyGo {
   constructor() {
     super();
     const sleepTicks = this.importObject.gojs["runtime.sleepTicks"];
-    this.importObject.gojs["runtime.sleepTicks"] = (ns) => sleepTicks(Math.ceil(Number(ns) / 1e6) * 1e6);
+    this.importObject.gojs["runtime.sleepTicks"] = (ns) => {
+      if (this.entering && Number(ns) === 0) return;
+      sleepTicks(Math.ceil(Number(ns) / 1e6) * 1e6);
+    };
   }
 };
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 // workers-go's Go code calls this.
 globalThis.tryCatch = (fn) => {
@@ -65,7 +74,8 @@ function begin(module, env, ctx, warm) {
   const go = new Go();
   const binding = warm ? { warm } : {};
   const context = createRuntimeContext({ env, ctx, binding });
-  const runtime = { go, binding, context, started: false, served: 0, warm: Boolean(warm) };
+  // pointer and capacity: where Go's request buffer is, and its size (structpages_buffer).
+  const runtime = { go, binding, context, started: false, served: 0, warm: Boolean(warm), pointer: 0, capacity: 0 };
   runtime.isReady = new Promise((resolve) => {
     const wasi = go.importObject.wasi_snapshot_preview1;
     const random = wasi.random_get;
@@ -85,7 +95,9 @@ function begin(module, env, ctx, warm) {
           resolve();
         },
       },
+      structpages: answers(runtime),
     });
+    runtime.exports = instance.exports;
     go.run(instance, context).catch((error) => {
       if (warm) warmFailure = `start-up failed while the module loaded: ${String(error?.stack || error).replace(/\s+/g, " ").slice(0, 900)}`;
     });
@@ -101,7 +113,7 @@ async function start(env, ctx) {
 
 // done keeps a runtime that answered normally for the next request, unless Go said its heap is full.
 function done(runtime) {
-  if (!runtime.go.exited && !runtime.binding.full && waiting.length < maxWaiting) waiting.push(runtime);
+  if (!runtime.go.exited && !runtime.full && waiting.length < maxWaiting) waiting.push(runtime);
 }
 
 // warm starts maxWarm runtimes while the module loads. If Go's start-up can't finish there, requests start
@@ -122,11 +134,60 @@ async function warm() {
   }
 }
 
-// serve gives a request to a Go runtime as two values, and takes its answer in one call when the handler
-// did not stream.
+// answers are the two functions Go answers a runtime's request through, workers.Serve's respond and write,
+// the request's own state in runtime.request. Each copies its bytes out of Go's memory during the call, as
+// Go reuses them after it.
+function answers(runtime) {
+  const copy = (at, length) => (length ? runtime.exports.memory.buffer.slice(at, at + length) : null);
+  return {
+    respond(status, headAt, headLength, bodyAt, bodyLength, more, full) {
+      const request = runtime.request;
+      runtime.full = full === 1;
+      const body = copy(bodyAt, bodyLength);
+      const headers = new Headers();
+      const lines = decoder.decode(new Uint8Array(runtime.exports.memory.buffer, headAt, headLength)).split("\n");
+      for (let i = 0; i + 1 < lines.length; i += 2) headers.append(lines[i], lines[i + 1]);
+      if (request.label) headers.set("x-go-runtime", request.label);
+      // The whole answer: the runtime is free for the next request.
+      if (!more) {
+        done(runtime);
+        return request.resolve(new Response(body, { status, headers }));
+      }
+      // A stream: the runtime is free when Go has written the last of it. If the client goes away first,
+      // Go is told (its request's context is cancelled) and the runtime is dropped.
+      const readable = new ReadableStream({
+        start(controller) {
+          request.stream = controller;
+          if (body) controller.enqueue(new Uint8Array(body));
+        },
+        cancel() {
+          request.stream = null;
+          runtime.exports.structpages_cancel();
+        },
+      });
+      request.resolve(new Response(readable, { status, headers }));
+    },
+    write(bodyAt, bodyLength, more, full) {
+      const request = runtime.request;
+      if (!request.stream) return 0;
+      runtime.full = full === 1;
+      const body = copy(bodyAt, bodyLength);
+      if (body) request.stream.enqueue(new Uint8Array(body));
+      if (!more) {
+        request.stream.close();
+        request.stream = null;
+        done(runtime);
+      }
+      return 1;
+    },
+  };
+}
+
+// serve gives a request to a Go runtime, written into its memory, and takes its answer in one call when the
+// handler did not stream.
 async function serve(request, env, ctx) {
-  let head = `${request.method}\n${request.url}`;
-  for (const [name, value] of request.headers) head += `\n${name}\n${value}`;
+  let lines = `${request.method}\n${request.url}`;
+  request.headers.forEach((value, name) => (lines += `\n${name}\n${value}`));
   const body = request.body ? new Uint8Array(await request.arrayBuffer()) : null;
   let runtime = waiting.pop();
   const kind = runtime ? (runtime.served ? "reused" : runtime.warm ? "warm" : "new") : "new";
@@ -138,45 +199,28 @@ async function serve(request, env, ctx) {
     runtime = await start(env, ctx);
   }
   runtime.served++;
+  const label = request.headers.has("x-go-runtime") ? (warmFailure ? `${kind}; ${warmFailure}` : kind) : "";
   return new Promise((resolve, reject) => {
-    const { binding } = runtime;
-    let stream; // a streamed answer's controller, until the client goes away
-    binding.respond = (status, head, body, more) => {
-      const headers = new Headers();
-      const lines = head.split("\n");
-      for (let i = 0; i + 1 < lines.length; i += 2) headers.append(lines[i], lines[i + 1]);
-      if (request.headers.has("x-go-runtime")) headers.set("x-go-runtime", warmFailure ? `${kind}; ${warmFailure}` : kind);
-      // The whole answer: the runtime is free for the next request.
-      if (!more) {
-        done(runtime);
-        return resolve(new Response(body, { status, headers }));
-      }
-      // A stream: the runtime is free when Go has written the last of it. If the client goes away first,
-      // Go is told (its request's context is cancelled) and the runtime is dropped.
-      const readable = new ReadableStream({
-        start(controller) {
-          stream = controller;
-          if (body) controller.enqueue(body);
-        },
-        cancel() {
-          stream = null;
-          binding.cancel?.();
-        },
-      });
-      resolve(new Response(readable, { status, headers }));
-    };
-    binding.write = (body, more) => {
-      if (!stream) return false;
-      if (body) stream.enqueue(body);
-      if (!more) {
-        stream.close();
-        stream = null;
-        done(runtime);
-      }
-      return true;
-    };
+    runtime.request = { resolve, stream: null, label };
     try {
-      binding.serve(head, body);
+      const { exports } = runtime;
+      // Room for the head as UTF-8, at most three bytes for each of its UTF-16 units, and the body.
+      const bodyLength = body ? body.length : 0;
+      const size = lines.length * 3 + bodyLength;
+      if (size > runtime.capacity) {
+        runtime.pointer = exports.structpages_buffer(size) >>> 0;
+        runtime.capacity = size;
+      }
+      const memory = new Uint8Array(exports.memory.buffer, runtime.pointer, runtime.capacity);
+      const headLength = encoder.encodeInto(lines, memory).written;
+      if (body) memory.set(body, headLength);
+      runtime.go.entering = true;
+      try {
+        exports.structpages_serve(headLength, bodyLength);
+      } finally {
+        runtime.go.entering = false;
+      }
+      exports.go_scheduler();
     } catch (error) {
       reject(error); // the runtime is not kept
     }

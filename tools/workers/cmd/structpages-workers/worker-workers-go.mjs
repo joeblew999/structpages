@@ -24,6 +24,7 @@ function start(env, ctx) {
     const instance = new WebAssembly.Instance(await loadModule(), {
       ...go.importObject,
       workers: { ready: () => ready() },
+      structpages: { respond() {}, write: () => 0 }, // workers.Serve's own path, unused here
     });
     go.run(instance, createRuntimeContext({ env, ctx, binding }));
     await isReady;

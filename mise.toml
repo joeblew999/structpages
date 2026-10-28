@@ -39,8 +39,9 @@ outputs = ["build/bin/structpages-dev"]
 run = "go build -C tools/dev -o {{config_root}}/build/bin/structpages-dev ./cmd/structpages-dev"
 
 [tasks."tools:tinygo"]
-description = """TinyGo, as mise installs it, with its collection at every await patched out (tinygo#5800), in \
-build/tinygo: what the Worker builds use. Made again only when mise.toml or structpages-workers changes."""
+description = """TinyGo, as mise installs it, with its runtime patched (structpages-workers' patches: no collection at \
+every await, tinygo#5800; goroutine stacks reused; sync.Once without a lock once done), in build/tinygo: what the \
+Worker builds use. Made again only when mise.toml or structpages-workers changes."""
 sources = ["mise.toml", "tools/workers/cmd/structpages-workers/main.go"]
 outputs = ["build/tinygo/.patched"]
 run = "go run -C tools/workers ./cmd/structpages-workers tinygo -o {{config_root}}/build/tinygo"
@@ -49,7 +50,7 @@ run = "go run -C tools/workers ./cmd/structpages-workers tinygo -o {{config_root
 #
 # Each task runs in the root folder, after the tasks it depends on:
 #   generate -> test:dynamic, test:static, test:static-worker
-#   generate -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+#   generate -> bench:dynamic -> bench:static -> bench:static-worker -> bench:floor -> bench (the report)
 # The library is no app, so it has no e2e test, build or serve. Its generated files are for its own tests' static and
 # static-worker builds, and gitignored.
 
@@ -109,7 +110,7 @@ run = "structpages-dev report"
 #     -> build:dynamic       -> serve:dynamic
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
-#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench:floor -> bench (the report)
 # Builds go in examples/blog/build/ (gitignored).
 # `mise tasks deps example:blog:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -225,9 +226,16 @@ wait_for = ["example:blog:build", "example:blog:bench:static"]
 dir = "examples/blog"
 run = "structpages-dev bench static-worker"
 
+[tasks."example:blog:bench:floor"]
+description = "blog: time the two servers alone, Go's net/http and workerd, answering its recorded pages with no app behind them, into build/bench/."
+depends = ["example:blog:generate", "tools:dev"]
+wait_for = ["example:blog:build", "example:blog:bench:static-worker"]
+dir = "examples/blog"
+run = "structpages-dev bench floor"
+
 [tasks."example:blog:bench"]
 description = "blog: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:blog:build", "example:blog:bench:dynamic", "example:blog:bench:static", "example:blog:bench:static-worker"]
+depends = ["example:blog:build", "example:blog:bench:dynamic", "example:blog:bench:static", "example:blog:bench:static-worker", "example:blog:bench:floor"]
 dir = "examples/blog"
 run = "structpages-dev report"
 
@@ -238,7 +246,7 @@ run = "structpages-dev report"
 #     -> test:dynamic, test:static
 #     -> build:dynamic -> serve:dynamic
 #     -> build:static  -> serve:static
-#   build (both) -> bench:dynamic -> bench:static -> bench (the report)
+#   build (both) -> bench:dynamic -> bench:static -> bench:floor -> bench (the report)
 # Dynamic and static only: Go's html/template calls parts of reflect TinyGo lacks ((reflect.Type).NumOut),
 # so it can't run as a Worker.
 # Builds go in examples/html-template/build/ (gitignored).
@@ -324,9 +332,16 @@ wait_for = ["example:html-template:build", "example:html-template:bench:dynamic"
 dir = "examples/html-template"
 run = "structpages-dev bench static"
 
+[tasks."example:html-template:bench:floor"]
+description = "html-template: time the two servers alone, Go's net/http and workerd, answering its recorded pages with no app behind them, into build/bench/."
+depends = ["example:html-template:generate", "tools:dev"]
+wait_for = ["example:html-template:build", "example:html-template:bench:static"]
+dir = "examples/html-template"
+run = "structpages-dev bench floor"
+
 [tasks."example:html-template:bench"]
 description = "html-template: time it both ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:html-template:build", "example:html-template:bench:dynamic", "example:html-template:bench:static"]
+depends = ["example:html-template:build", "example:html-template:bench:dynamic", "example:html-template:bench:static", "example:html-template:bench:floor"]
 dir = "examples/html-template"
 run = "structpages-dev report"
 
@@ -338,7 +353,7 @@ run = "structpages-dev report"
 #     -> build:dynamic       -> serve:dynamic
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
-#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench:floor -> bench (the report)
 # Builds go in examples/htmx/build/ (gitignored).
 # `mise tasks deps example:htmx:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -454,9 +469,16 @@ wait_for = ["example:htmx:build", "example:htmx:bench:static"]
 dir = "examples/htmx"
 run = "structpages-dev bench static-worker"
 
+[tasks."example:htmx:bench:floor"]
+description = "htmx: time the two servers alone, Go's net/http and workerd, answering its recorded pages with no app behind them, into build/bench/."
+depends = ["example:htmx:generate", "tools:dev"]
+wait_for = ["example:htmx:build", "example:htmx:bench:static-worker"]
+dir = "examples/htmx"
+run = "structpages-dev bench floor"
+
 [tasks."example:htmx:bench"]
 description = "htmx: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:htmx:build", "example:htmx:bench:dynamic", "example:htmx:bench:static", "example:htmx:bench:static-worker"]
+depends = ["example:htmx:build", "example:htmx:bench:dynamic", "example:htmx:bench:static", "example:htmx:bench:static-worker", "example:htmx:bench:floor"]
 dir = "examples/htmx"
 run = "structpages-dev report"
 
@@ -468,7 +490,7 @@ run = "structpages-dev report"
 #     -> build:dynamic       -> serve:dynamic
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
-#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench:floor -> bench (the report)
 # Builds go in examples/htmx-render-target/build/ (gitignored).
 # `mise tasks deps example:htmx-render-target:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -584,9 +606,16 @@ wait_for = ["example:htmx-render-target:build", "example:htmx-render-target:benc
 dir = "examples/htmx-render-target"
 run = "structpages-dev bench static-worker"
 
+[tasks."example:htmx-render-target:bench:floor"]
+description = "htmx-render-target: time the two servers alone, Go's net/http and workerd, answering its recorded pages with no app behind them, into build/bench/."
+depends = ["example:htmx-render-target:generate", "tools:dev"]
+wait_for = ["example:htmx-render-target:build", "example:htmx-render-target:bench:static-worker"]
+dir = "examples/htmx-render-target"
+run = "structpages-dev bench floor"
+
 [tasks."example:htmx-render-target:bench"]
 description = "htmx-render-target: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:htmx-render-target:build", "example:htmx-render-target:bench:dynamic", "example:htmx-render-target:bench:static", "example:htmx-render-target:bench:static-worker"]
+depends = ["example:htmx-render-target:build", "example:htmx-render-target:bench:dynamic", "example:htmx-render-target:bench:static", "example:htmx-render-target:bench:static-worker", "example:htmx-render-target:bench:floor"]
 dir = "examples/htmx-render-target"
 run = "structpages-dev report"
 
@@ -637,7 +666,7 @@ depends = ["example:lint-misuse:test:dynamic", "example:lint-misuse:test:static"
 #     -> build:dynamic       -> serve:dynamic
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
-#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench:floor -> bench (the report)
 # Builds go in examples/simple/build/ (gitignored).
 # `mise tasks deps example:simple:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -753,9 +782,16 @@ wait_for = ["example:simple:build", "example:simple:bench:static"]
 dir = "examples/simple"
 run = "structpages-dev bench static-worker"
 
+[tasks."example:simple:bench:floor"]
+description = "simple: time the two servers alone, Go's net/http and workerd, answering its recorded pages with no app behind them, into build/bench/."
+depends = ["example:simple:generate", "tools:dev"]
+wait_for = ["example:simple:build", "example:simple:bench:static-worker"]
+dir = "examples/simple"
+run = "structpages-dev bench floor"
+
 [tasks."example:simple:bench"]
 description = "simple: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:simple:build", "example:simple:bench:dynamic", "example:simple:bench:static", "example:simple:bench:static-worker"]
+depends = ["example:simple:build", "example:simple:bench:dynamic", "example:simple:bench:static", "example:simple:bench:static-worker", "example:simple:bench:floor"]
 dir = "examples/simple"
 run = "structpages-dev report"
 
@@ -767,11 +803,13 @@ run = "structpages-dev report"
 #     -> build:dynamic       -> serve:dynamic
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
-#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# todo also builds its Worker four more ways, to show what each of the three things the static-worker build has
-# saves: the patched TinyGo (tools:tinygo), the 8 MB starting heap, and structpages-workers' glue (one crossing into
-# Go and out, runtimes warmed and pooled). static-worker-plain has none of them, as TinyGo and workers-go ship; the
-# other three have one each. It times them after bench:static-worker.
+#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench:floor -> bench (the report)
+# bench:floor times the two servers the ways run on, Go's net/http and workerd, answering todo's recorded pages with
+# no app behind them, so the report can say what each way costs on top of its server.
+# todo also builds its Worker six more ways, to show what each of structpages-workers' defaults saves: the static-worker
+# build has them all (the patched TinyGo, tools:tinygo; the 8 MB starting heap; structpages-workers' glue; -opt 2; the
+# leaking collector), each static-worker-no-* build has one turned off, and static-worker-plain has none, as TinyGo and
+# workers-go ship. It times them after bench:floor.
 # Builds go in examples/todo/build/ (gitignored).
 # `mise tasks deps example:todo:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -859,33 +897,45 @@ dir = "examples/todo"
 raw = true
 run = "structpages-dev serve static-worker"
 
-[tasks."example:todo:build:static-worker-plain"]
-description = "todo: build its Worker as TinyGo and workers-go ship (none of the three), into build/static-worker-plain/, to measure."
+[tasks."example:todo:build:static-worker-no-patch"]
+description = "todo: build its Worker with the TinyGo installed, not the patched one (tools:tinygo), into build/static-worker-no-patch/, to measure."
 depends = ["example:todo:generate"]
 dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker-plain -heap 0 -glue workers-go"
+run = "go tool structpages-workers -o build/static-worker-no-patch -tinygoroot installed"
 
-[tasks."example:todo:build:static-worker-heap"]
-description = "todo: build its Worker with the 8 MB starting heap only, into build/static-worker-heap/, to measure."
-depends = ["example:todo:generate"]
-dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker-heap -glue workers-go"
-
-[tasks."example:todo:build:static-worker-gcpatch"]
-description = "todo: build its Worker with the patched TinyGo only, into build/static-worker-gcpatch/, to measure."
+[tasks."example:todo:build:static-worker-no-heap"]
+description = "todo: build its Worker with TinyGo's own starting heap, not 8 MB, into build/static-worker-no-heap/, to measure."
 depends = ["example:todo:generate", "tools:tinygo"]
 dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker-gcpatch -heap 0 -glue workers-go -tinygoroot ../../build/tinygo"
+run = "go tool structpages-workers -o build/static-worker-no-heap -heap 0 -tinygoroot ../../build/tinygo"
 
-[tasks."example:todo:build:static-worker-glue"]
-description = "todo: build its Worker with structpages-workers' glue only, into build/static-worker-glue/, to measure."
+[tasks."example:todo:build:static-worker-no-glue"]
+description = "todo: build its Worker with workers-go's glue, and so TinyGo's collector, into build/static-worker-no-glue/, to measure."
+depends = ["example:todo:generate", "tools:tinygo"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker-no-glue -glue workers-go -gc precise -tinygoroot ../../build/tinygo"
+
+[tasks."example:todo:build:static-worker-no-opt"]
+description = "todo: build its Worker with TinyGo's smallest code, not its fastest, into build/static-worker-no-opt/, to measure."
+depends = ["example:todo:generate", "tools:tinygo"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker-no-opt -opt z -tinygoroot ../../build/tinygo"
+
+[tasks."example:todo:build:static-worker-no-leaking"]
+description = "todo: build its Worker with TinyGo's own collector, not the leaking one, into build/static-worker-no-leaking/, to measure."
+depends = ["example:todo:generate", "tools:tinygo"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker-no-leaking -gc precise -tinygoroot ../../build/tinygo"
+
+[tasks."example:todo:build:static-worker-plain"]
+description = "todo: build its Worker with none of them, as TinyGo and workers-go ship, into build/static-worker-plain/, to measure."
 depends = ["example:todo:generate"]
 dir = "examples/todo"
-run = "go tool structpages-workers -o build/static-worker-glue -heap 0"
+run = "go tool structpages-workers -o build/static-worker-plain -tinygoroot installed -heap 0 -glue workers-go -opt z -gc precise"
 
 [tasks."example:todo:build"]
-description = "todo: build it all three ways, and its Worker's three variants."
-depends = ["example:todo:build:dynamic", "example:todo:build:static", "example:todo:build:static-worker", "example:todo:build:static-worker-plain", "example:todo:build:static-worker-heap", "example:todo:build:static-worker-gcpatch", "example:todo:build:static-worker-glue"]
+description = "todo: build it all three ways, and its Worker six more ways."
+depends = ["example:todo:build:dynamic", "example:todo:build:static", "example:todo:build:static-worker", "example:todo:build:static-worker-no-patch", "example:todo:build:static-worker-no-heap", "example:todo:build:static-worker-no-glue", "example:todo:build:static-worker-no-opt", "example:todo:build:static-worker-no-leaking", "example:todo:build:static-worker-plain"]
 
 # The bench tasks time one way at a time, after every build: wait_for waits for a task only if it is running, so
 # bench:static alone runs just itself.
@@ -911,37 +961,58 @@ wait_for = ["example:todo:build", "example:todo:bench:static"]
 dir = "examples/todo"
 run = "structpages-dev bench static-worker"
 
-[tasks."example:todo:bench:static-worker-plain"]
-description = "todo: time its Worker as TinyGo ships (no starting heap, the TinyGo installed): served and started, into build/bench/."
-depends = ["example:todo:build:static-worker-plain", "tools:dev"]
+[tasks."example:todo:bench:floor"]
+description = "todo: time the two servers alone, Go's net/http and workerd, answering its recorded pages with no app behind them, into build/bench/."
+depends = ["example:todo:generate", "tools:dev"]
 wait_for = ["example:todo:build", "example:todo:bench:static-worker"]
+dir = "examples/todo"
+run = "structpages-dev bench floor"
+
+[tasks."example:todo:bench:static-worker-no-patch"]
+description = "todo: time its Worker with the TinyGo installed, not the patched one (tools:tinygo): served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-no-patch", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:floor"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-no-patch"
+
+[tasks."example:todo:bench:static-worker-no-heap"]
+description = "todo: time its Worker with TinyGo's own starting heap, not 8 MB: served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-no-heap", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker-no-patch"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-no-heap"
+
+[tasks."example:todo:bench:static-worker-no-glue"]
+description = "todo: time its Worker with workers-go's glue, and so TinyGo's collector: served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-no-glue", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker-no-heap"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-no-glue"
+
+[tasks."example:todo:bench:static-worker-no-opt"]
+description = "todo: time its Worker with TinyGo's smallest code, not its fastest: served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-no-opt", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker-no-glue"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-no-opt"
+
+[tasks."example:todo:bench:static-worker-no-leaking"]
+description = "todo: time its Worker with TinyGo's own collector, not the leaking one: served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-no-leaking", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker-no-opt"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-no-leaking"
+
+[tasks."example:todo:bench:static-worker-plain"]
+description = "todo: time its Worker with none of them, as TinyGo and workers-go ship: served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-plain", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker-no-leaking"]
 dir = "examples/todo"
 run = "structpages-dev bench static-worker static-worker-plain"
 
-[tasks."example:todo:bench:static-worker-heap"]
-description = "todo: time its Worker with the 8 MB starting heap only (the TinyGo installed): served and started, into build/bench/."
-depends = ["example:todo:build:static-worker-heap", "tools:dev"]
-wait_for = ["example:todo:build", "example:todo:bench:static-worker-plain"]
-dir = "examples/todo"
-run = "structpages-dev bench static-worker static-worker-heap"
-
-[tasks."example:todo:bench:static-worker-gcpatch"]
-description = "todo: time its Worker with the patched TinyGo only (no starting heap): served and started, into build/bench/."
-depends = ["example:todo:build:static-worker-gcpatch", "tools:dev"]
-wait_for = ["example:todo:build", "example:todo:bench:static-worker-heap"]
-dir = "examples/todo"
-run = "structpages-dev bench static-worker static-worker-gcpatch"
-
-[tasks."example:todo:bench:static-worker-glue"]
-description = "todo: time its Worker with structpages-workers' glue only: served and started, into build/bench/."
-depends = ["example:todo:build:static-worker-glue", "tools:dev"]
-wait_for = ["example:todo:build", "example:todo:bench:static-worker-gcpatch"]
-dir = "examples/todo"
-run = "structpages-dev bench static-worker static-worker-glue"
-
 [tasks."example:todo:bench"]
 description = "todo: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:todo:build", "example:todo:bench:dynamic", "example:todo:bench:static", "example:todo:bench:static-worker", "example:todo:bench:static-worker-plain", "example:todo:bench:static-worker-heap", "example:todo:bench:static-worker-gcpatch", "example:todo:bench:static-worker-glue"]
+depends = ["example:todo:build", "example:todo:bench:dynamic", "example:todo:bench:static", "example:todo:bench:static-worker", "example:todo:bench:floor", "example:todo:bench:static-worker-no-patch", "example:todo:bench:static-worker-no-heap", "example:todo:bench:static-worker-no-glue", "example:todo:bench:static-worker-no-opt", "example:todo:bench:static-worker-no-leaking", "example:todo:bench:static-worker-plain"]
 dir = "examples/todo"
 run = "structpages-dev report"
 
@@ -953,7 +1024,7 @@ run = "structpages-dev report"
 #     -> build:dynamic       -> serve:dynamic
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
-#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+#   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench:floor -> bench (the report)
 # Builds go in examples/url-validation/build/ (gitignored).
 # `mise tasks deps example:url-validation:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -1063,9 +1134,16 @@ wait_for = ["example:url-validation:build", "example:url-validation:bench:static
 dir = "examples/url-validation"
 run = "structpages-dev bench static-worker"
 
+[tasks."example:url-validation:bench:floor"]
+description = "url-validation: time the two servers alone, Go's net/http and workerd, answering its recorded pages with no app behind them, into build/bench/."
+depends = ["example:url-validation:generate", "tools:dev"]
+wait_for = ["example:url-validation:build", "example:url-validation:bench:static-worker"]
+dir = "examples/url-validation"
+run = "structpages-dev bench floor"
+
 [tasks."example:url-validation:bench"]
 description = "url-validation: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:url-validation:build", "example:url-validation:bench:dynamic", "example:url-validation:bench:static", "example:url-validation:bench:static-worker"]
+depends = ["example:url-validation:build", "example:url-validation:bench:dynamic", "example:url-validation:bench:static", "example:url-validation:bench:static-worker", "example:url-validation:bench:floor"]
 dir = "examples/url-validation"
 run = "structpages-dev report"
 

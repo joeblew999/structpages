@@ -83,17 +83,16 @@ Apple M2 Pro:
 - **Static-worker vs dynamic: about 3.4× the time and 2–3× the bytes.** Generated costs about the same as reflection
   on Go, so this gap is TinyGo's compiler, runtime and garbage collector, not structpages. A simple GET is 2.5µs. These
   TinyGo runs are native binaries, not WebAssembly.
-- **A real page** (`mise run bench:examples`, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md)):
-  `todo`'s `GET /` takes 9.6µs with reflection, **7.4µs generated (23% faster, a fifth fewer allocations)**, and
-  30µs under TinyGo.
-- **As a Worker in workerd**, what Cloudflare bills is the server's CPU per request: `todo`'s `GET /` took about 2.5 ms
-  of it as TinyGo ships, because TinyGo's runtime collected garbage at every await ([tinygo#5800](https://github.com/tinygo-org/tinygo/issues/5800)).
-  The Worker builds now use a TinyGo with that patched out, as charter does, which mise's `tools:tinygo` makes
-  (`structpages-workers tinygo`): about 0.43 ms, 82% less. An 8 MB starting
-  heap alone changes nothing measurable. The rest of charter's tricks are in `structpages-workers`' glue now: one
-  crossing into Go and one out, runtimes kept in a pool and started while the module loads, Cloudflare's clock and
-  seed handled ([docs/tinygo.md](./docs/tinygo.md)); `examples/todo`'s report measures each against the Worker as
-  TinyGo and workers-go ship.
+- **A real page** (`mise run example:todo:bench`, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md)):
+  `todo`'s `GET /` takes 4.7µs in-process both with reflection and generated, and 15.2µs under TinyGo (natively). It
+  was 9.7µs and 7.5µs: `URLFor` and `ID` now work a page type's route and a method's id out once, where they walked
+  the page tree on every call.
+- **As a Worker in workerd**, the server's CPU per request for `todo`'s `GET /`: 2,621µs as TinyGo and workers-go
+  ship; 78.8µs with every trick, all of charter's and some more, each on by default in `structpages-workers`
+  ([README](./README.md#on-cloudflare-workers-every-trick-on-by-default), [docs/tinygo.md](./docs/tinygo.md)). A Go
+  server takes 39µs. Each server alone, answering with no app, takes 35µs (net/http) and 56µs (workerd), so the
+  ways' own parts are about 4.5µs (Go) and 22.8µs (the Worker). The report builds the Worker with each trick turned
+  off, to show what each saves.
 
 **Generator gaps** (`generator_gaps_test.go`: one test per app pattern, run all three ways by the suite; reflection's
 answer is the one the other two must give):

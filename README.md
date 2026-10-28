@@ -189,7 +189,7 @@ does that one step: a test summary, a benchmark, a report or a server.
 | `mise run test` / `test:dynamic` / `test:static` / `test:static-worker` | the library's tests, all three ways or one, a line each with every test skipped and why |
 | `mise run example:todo:test` / `example:todo:test:dynamic` / … | an example's tests, all its ways or one |
 | `mise run example:todo:serve:dynamic` / `example:todo:serve:static` / `example:todo:serve:static-worker` | serve an example's build on http://localhost:8080 (static-worker: WebAssembly in workerd) |
-| `mise run bench` / `example:todo:bench` | benchmarks, each way one at a time: in-process, and for an app served (the time and the server's CPU per request) and started; todo's also compares its Worker built without the patched TinyGo (`tools:tinygo`), the starting heap, or both. Into that folder's `BENCH_GENERATED.md` ([the library's](./BENCH_GENERATED.md), [todo's](./examples/todo/BENCH_GENERATED.md)) |
+| `mise run bench` / `example:todo:bench` | benchmarks, each way one at a time: in-process, and for an app served (the time and the server's CPU per request) and started; for an app, its two servers alone too (`bench:floor`), so each way's own CPU shows; todo's also builds its Worker with each trick turned off. Into that folder's `BENCH_GENERATED.md` ([the library's](./BENCH_GENERATED.md), [todo's](./examples/todo/BENCH_GENERATED.md)) |
 | `mise run examples` / `bench:examples` | every example's tests / benchmarks |
 | `mise run generated:check` | fail if a generated file changed and isn't committed |
 | `mise run lint:examples` | structpages-lint (`tools/lint`) over every example |
@@ -198,7 +198,45 @@ does that one step: a test summary, a benchmark, a report or a server.
 Two examples run fewer ways, and their sections say why: html-template has no static-worker (Go's `html/template` uses
 parts of `reflect` TinyGo lacks), and lint-misuse is a fixture for the linter, not an app to serve.
 
-On standard Go, generated code comes out about even with `reflect` in the library's micro-benchmarks (faster for `ID`,
-slower for `Mount` and `URLFor`), and 23% faster serving `todo`'s page, with a fifth fewer allocations.
+On standard Go, generated code comes out about even with `reflect`, in the library's micro-benchmarks (faster for `ID`,
+slower for `Mount`) and serving `todo`'s page.
+
+### On Cloudflare Workers: every trick, on by default
+
+`structpages-workers` builds the fastest Worker it knows how to with no flags at all, so the plain command is the
+one to use; each trick is a flag that turns it off. The tricks are charter's, and some more
+([docs/tinygo.md](./docs/tinygo.md) says what each does and why):
+
+| Trick | What it does |
+|---|---|
+| **structpages-workers' glue** (`worker.mjs`, `workers.Serve`) | Go runtimes pooled and kept between requests; two started and warmed while the module loads; a request into Go and its answer out as numbers, the bytes in Go's memory, where workers-go's request path crosses between JavaScript and Go some hundred times; Cloudflare's clock and start-up seed handled |
+| **The leaking collector** (`-gc leaking`) | memory is never collected: allocating is a pointer moving on, and the glue hands a runtime whose heap is used up no more requests |
+| **A starting heap** (`-heap 8`) | room for a runtime's requests from the start |
+| **A patched TinyGo** (`tools:tinygo`) | no collection at every await ([tinygo#5800](https://github.com/tinygo-org/tinygo/issues/5800)); goroutine stacks reused, not allocated and cleared for every call into Go; `sync.Once` without a lock once done |
+| **TinyGo's fastest code** (`-opt 2`) | rather than its smallest |
+| **structpages itself** | `URLFor` and `ID` work a page type's route and a method's id out once, where they walked the page tree on every call: faster all three ways |
+
+**Measured** in [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md) (`mise run
+example:todo:bench`, Apple M2 Pro): the server's CPU for todo's page, each way on its own server, and each server
+answering the same page with no app behind it:
+
+| CPU per request | dynamic | static | static-worker |
+|---|---|---|---|
+| the build, served | 39.2 µs | 40.0 µs | 78.8 µs |
+| its server alone, no app | 35.1 µs (Go's net/http) | 35.1 µs | 56.0 µs (workerd) |
+| **the way's own** | 4.1 µs | 4.9 µs | 22.8 µs |
+
+The Worker built as TinyGo and workers-go ship took **2,621 µs** for the same page: with every trick, **78.8 µs, 97%
+less**. Turning one off at a time, against the 78.8 µs: no glue (workers-go's, and so TinyGo's collector) 632 µs; no
+starting heap 294 µs; TinyGo's own collector 102 µs; the TinyGo as installed 90 µs; `-opt z` 85 µs (within the
+noise). Its `app.wasm` is 574 KB gzipped, a fifth of Workers Free's 3 MB.
+
+**Where TinyGo stands against Go.** On the same machine the Worker still costs twice the CPU of a Go server: workerd
+alone, answering with no app, costs more (56 µs) than the whole Go server running todo (39 µs), and the Worker's own
+part, TinyGo's WebAssembly with the glue, is 22.8 µs against Go's 4–5 µs. TinyGo's code is slower than Go's even
+natively (15.2 µs against 4.7 µs in-process, with TinyGo's native collector), and slower again as WebAssembly in V8.
+On Cloudflare, workerd's own work is Cloudflare's: a Worker is billed for its own CPU, here about 0.02 ms a request,
+which Cloudflare's logs, in whole milliseconds, show as 0 ms, as they do a TypeScript Worker's (charter's own
+comparison, in its docs/self/benchmarks.md).
 
 Where this stands and what comes next: [TINYGO-STRATEGY.md](./TINYGO-STRATEGY.md).

@@ -9,8 +9,10 @@
 //
 //	structpages-dev test dynamic|static|static-worker
 //	structpages-dev bench dynamic|static|static-worker [build]
+//	structpages-dev bench floor
 //	structpages-dev report
 //	structpages-dev serve dynamic|static|static-worker
+//	structpages-dev floor
 //
 // It generates and builds nothing an app needs: mise.toml's generate and
 // build tasks do, and the tasks running structpages-dev depend on them, so the
@@ -22,10 +24,14 @@
 // detector, but under TinyGo, which lacks it), and prints a line: how many
 // passed, every test skipped with why, and the failing tests' own output.
 // bench times the folder's benchmarks that way, in-process and, for an app,
-// its build served, into build/bench/, and report compares the ways it finds
-// there with benchstat into the folder's BENCH_GENERATED.md. serve runs the
-// folder's build for a way, build/<way>, on :8080 until Ctrl-C: in workerd
-// for static-worker.
+// its build served, into build/bench/; bench floor times the two servers the
+// ways are served by, Go's net/http and workerd, answering the app's
+// recorded pages with no app behind them; and report compares what it finds
+// there with benchstat into the folder's BENCH_GENERATED.md, with each way's
+// own CPU, its build's less its server's. serve runs the folder's build for a
+// way, build/<way>, on :8080 until Ctrl-C: in workerd for static-worker.
+// floor serves the recorded pages with net/http, no app behind them, until
+// stopped: bench floor runs it.
 package main
 
 import (
@@ -51,8 +57,10 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev test dynamic|static|static-worker\n"+
 			"       structpages-dev bench dynamic|static|static-worker [build]\n"+
+			"       structpages-dev bench floor\n"+
 			"       structpages-dev report\n"+
-			"       structpages-dev serve dynamic|static|static-worker")
+			"       structpages-dev serve dynamic|static|static-worker\n"+
+			"       structpages-dev floor")
 	}
 	flag.Parse()
 	r, ok := repoRoot()
@@ -74,6 +82,8 @@ func main() {
 		os.Exit(serve(args))
 	case "report":
 		os.Exit(report(args))
+	case "floor":
+		os.Exit(floor(args))
 	default:
 		fmt.Fprintf(os.Stderr, "structpages-dev: unknown command %q\n", cmd)
 		flag.Usage()

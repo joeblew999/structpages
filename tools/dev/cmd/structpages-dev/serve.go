@@ -66,14 +66,23 @@ func startBuild(f folder, way, build string, out io.Writer) (*server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", built, f.name, build)
 	}
+	s, err := startCmd(f, cmd, out)
+	if err != nil {
+		return nil, err
+	}
+	if way == "static-worker" {
+		s.wasm = info.Size()
+	}
+	return s, nil
+}
+
+// startCmd starts cmd, a server for addr, in f, its output to out.
+func startCmd(f folder, cmd *exec.Cmd, out io.Writer) (*server, error) {
 	if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
 		_ = c.Close()
 		return nil, fmt.Errorf("%s is in use: stop what is on it first", addr)
 	}
 	s := &server{cmd: cmd, done: make(chan error, 1)}
-	if way == "static-worker" {
-		s.wasm = info.Size()
-	}
 	cmd.Dir, cmd.Stdout, cmd.Stderr = f.dir, out, out
 	if err := cmd.Start(); err != nil {
 		return nil, err

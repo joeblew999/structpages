@@ -139,11 +139,25 @@ func idFor(pc *parseContext, currentPage *PageNode, v any, rawID bool) (string, 
 		return pc.functionID(info, rawID), nil
 	}
 
+	key := idKey{info: info, page: currentPage, rawID: rawID}
+	pc.lookupMu.RLock()
+	id, ok := pc.ids[key]
+	pc.lookupMu.RUnlock()
+	if ok {
+		return id, nil
+	}
 	pn, err := resolvePageForMethod(pc, currentPage, info)
 	if err != nil {
 		return "", fmt.Errorf("cannot find page for method expression: %w", err)
 	}
-	return pc.componentID(pn, info.methodName, rawID), nil
+	id = pc.componentID(pn, info.methodName, rawID)
+	pc.lookupMu.Lock()
+	if pc.ids == nil {
+		pc.ids = make(map[idKey]string)
+	}
+	pc.ids[key] = id
+	pc.lookupMu.Unlock()
+	return id, nil
 }
 
 // idForChain resolves the []any composition form for ID/IDTarget.

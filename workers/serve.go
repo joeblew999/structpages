@@ -10,23 +10,22 @@ import (
 	"runtime"
 	"strings"
 	"syscall/js"
+	"unsafe"
 
 	"github.com/syumai/workers-go"
 )
 
-// What tools/workers' worker.mjs and this runtime call each other through,
-// and JavaScript's byte array.
-var (
-	binding    = js.Global().Get("context").Get("binding")
-	uint8Array = js.Global().Get("Uint8Array")
-)
+// What tools/workers' worker.mjs gives a runtime as it starts.
+var binding = js.Global().Get("context").Get("binding")
 
 // What this runtime has served: how many requests, the allocation counter
-// after the last look, and the most one request allocated since.
+// after the last look, the most one request allocated since, and whether
+// the heap has no room for another.
 var (
 	served      int
 	allocated   uint64
 	mostRequest uint64
+	full        bool
 )
 
 // Serve hands h the requests of the Worker it runs in, and never returns: a
@@ -34,15 +33,19 @@ var (
 // delivers them, and not returning keeps the Go runtime alive for the next
 // one.
 //
-// worker.mjs gives a request in one call, the binding's serve, as two values,
-// and takes the answer in one, respond (answer has the protocol): workers-go's
-// own request path costs a request a dozen goroutines and some hundred values
-// crossing between JavaScript and Go, and each crossing costs. A runtime that
-// worker.mjs starts while the Worker's module loads is given paths to warm up
-// with, the binding's warm: Serve first answers a GET of each, into nothing,
-// so what a new isolate's first request would pay for is done before it
-// comes. workers-go still gets the handler, so its own request path works too
-// (structpages-workers -glue workers-go).
+// A request comes in, and its answer goes out, as numbers only: worker.mjs
+// writes the request into this runtime's memory and calls serveRequest, and
+// the answer goes back through respond, which worker.mjs reads out of the
+// same memory (answer has the protocol). No JavaScript value is made for
+// it: workers-go's own request path costs a request a dozen goroutines and
+// some hundred values crossing between JavaScript and Go, and even one
+// js.FuncOf call costs a dozen, each with a finalizer.
+//
+// A runtime that worker.mjs starts while the Worker's module loads is given
+// paths to warm up with, the binding's warm: Serve first answers a GET of
+// each, into nothing, so what a new isolate's first request would pay for is
+// done before it comes. workers-go still gets the handler, so its own
+// request path works too (structpages-workers -glue workers-go).
 func Serve(h http.Handler) {
 	if paths := binding.Get("warm"); paths.Type() == js.TypeObject {
 		for i := range paths.Length() {
@@ -56,10 +59,13 @@ func Serve(h http.Handler) {
 	runtime.ReadMemStats(&stats)
 	allocated = stats.TotalAlloc // start-up is no request's allocation
 	handler := guard(h)
-	binding.Set("serve", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		answer(handler, args[0].String(), args[1])
-		return nil
-	}))
+	// One goroutine answers every request, one at a time, as worker.mjs
+	// gives a runtime one at a time: none is started per request.
+	go func() {
+		for r := range requests {
+			answer(handler, r.head, r.body)
+		}
+	}()
 	workers.ServeNonBlock(handler)
 	workers.Ready()
 	select {}
@@ -72,22 +78,77 @@ func (d *discard) Header() http.Header         { return d.header }
 func (d *discard) Write(p []byte) (int, error) { return len(p), nil }
 func (d *discard) WriteHeader(int)             {}
 
-// answer runs one request, in the goroutine of the call from JavaScript. head
-// is the method, the URL, then each header's name and its value, one per
-// line; body is the request's bytes (a Uint8Array), or null. The answer goes
-// back through two functions worker.mjs puts on the binding:
+// A request as worker.mjs gives it: see answer.
+type request struct {
+	head string
+	body []byte
+}
+
+// requests holds the request serveRequest was given until Serve's goroutine
+// takes it, which worker.mjs runs next.
+var requests = make(chan request, 1)
+
+// buffer is where worker.mjs writes a request: requestBuffer gives it room.
+var buffer []byte //nolint:unused // used by the functions JavaScript calls
+
+// requestBuffer makes buffer at least size bytes, and says where it is.
+// worker.mjs keeps the answer and asks again only for a bigger request.
 //
-//   - respond(status, head, body, more): the status, the headers (a name and
-//     its value, one per line), and what was written so far. A handler that
-//     returns without flushing, as a page does, costs this one call, more
-//     false.
-//   - write(body, more): what was written since, once the answer is a stream.
-//     It returns false when the client has gone.
+//go:wasmexport structpages_buffer
+func requestBuffer(size uint32) unsafe.Pointer { //nolint:unused // JavaScript calls it
+	if cap(buffer) < int(size) {
+		buffer = make([]byte, size)
+	}
+	buffer = buffer[:cap(buffer)]
+	return unsafe.Pointer(unsafe.SliceData(buffer))
+}
+
+// serveRequest takes the request worker.mjs wrote into buffer: its head's
+// headLen bytes, then its body's bodyLen. worker.mjs then runs TinyGo's
+// scheduler, which answers it.
+//
+//go:wasmexport structpages_serve
+func serveRequest(headLen, bodyLen uint32) { //nolint:unused // JavaScript calls it
+	r := request{head: string(buffer[:headLen])}
+	if bodyLen > 0 {
+		r.body = bytes.Clone(buffer[headLen : headLen+bodyLen])
+	}
+	requests <- r
+}
+
+// cancelRequest cancels the running request's context: worker.mjs calls it
+// when the client of a streamed answer has gone.
+//
+//go:wasmexport structpages_cancel
+func cancelRequest() { //nolint:unused // JavaScript calls it
+	if cancelRunning != nil {
+		cancelRunning()
+	}
+}
+
+// The two functions worker.mjs gives the answer to, reading their bytes out
+// of this runtime's memory during the call:
+//
+//   - respond: the status, the headers (a name and its value, one per line),
+//     and what was written so far. A handler that returns without flushing,
+//     as a page does, costs this one call, more 0. full is 1 when the heap
+//     has no room for another request.
+//   - write: what was written since, once the answer is a stream. It returns
+//     0 when the client has gone.
+//
+//go:wasmimport structpages respond
+func respond(status uint32, head unsafe.Pointer, headLen uint32, body unsafe.Pointer, bodyLen, more, full uint32)
+
+//go:wasmimport structpages write
+func write(body unsafe.Pointer, bodyLen, more, full uint32) uint32
+
+// answer runs one request. head is the method, the URL, then each header's
+// name and its value, one per line; body is the request's bytes, or nil.
 //
 // An answer becomes a stream at the handler's first Flush (http.Flusher), or
 // when streamLimit bytes are waiting: nothing else sends bytes before the
 // handler returns, as with net/http.
-func answer(h http.Handler, head string, body js.Value) {
+func answer(h http.Handler, head string, body []byte) {
 	lines := strings.Split(head, "\n")
 	w := &response{header: http.Header{}}
 	if len(lines) < 2 {
@@ -105,32 +166,12 @@ func answer(h http.Handler, head string, body js.Value) {
 		r.Header.Add(lines[i], lines[i+1])
 	}
 	r.RemoteAddr = r.Header.Get("Cf-Connecting-Ip")
-	if !body.IsNull() {
-		r.Body, r.ContentLength = &requestBody{js: body}, int64(body.Length())
+	if body != nil {
+		r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(body)), int64(len(body))
 	}
 	h.ServeHTTP(w, r)
 	w.send(false)
 }
-
-// requestBody copies the request's body out of JavaScript when the handler
-// first reads it.
-type requestBody struct {
-	js     js.Value
-	copied bool
-	data   bytes.Reader
-}
-
-func (b *requestBody) Read(p []byte) (int, error) {
-	if !b.copied {
-		data := make([]byte, b.js.Length())
-		js.CopyBytesToGo(data, b.js)
-		b.data.Reset(data)
-		b.copied = true
-	}
-	return b.data.Read(p)
-}
-
-func (b *requestBody) Close() error { return nil }
 
 // streamLimit is how much of an answer waits in Go before it is sent on as a
 // stream.
@@ -169,20 +210,16 @@ func (w *response) Write(p []byte) (int, error) {
 func (w *response) Flush() { w.send(true) }
 
 // send gives JavaScript what was written since the last send. more says
-// whether the handler is still running: after the last send, the binding's
-// functions are the next request's.
+// whether the handler is still running.
 func (w *response) send(more bool) {
 	if w.closed {
 		return
 	}
-	body := js.Null()
-	if len(w.body) > 0 {
-		body = uint8Array.New(len(w.body))
-		js.CopyBytesToJS(body, w.body)
-		w.body = w.body[:0]
-	}
+	// A length in WebAssembly's 32-bit memory fits a uint32.
+	body, bodyLen := unsafe.Pointer(unsafe.SliceData(w.body)), uint32(len(w.body)) //nolint:gosec // see above
 	if w.streaming {
-		w.closed = !binding.Call("write", body, more).Bool() || !more
+		w.closed = write(body, bodyLen, flag(more), flag(full)) == 0 || !more
+		w.body = w.body[:0]
 		return
 	}
 	w.streaming, w.closed = true, !more
@@ -190,41 +227,50 @@ func (w *response) send(more bool) {
 	var head []byte
 	for name, values := range w.header {
 		for _, value := range values {
-			head = append(append(append(append(head, name...), '\n'), newlines.Replace(value)...), '\n')
+			if strings.ContainsAny(value, "\r\n") {
+				value = newlines.Replace(value)
+			}
+			head = append(append(append(append(head, name...), '\n'), value...), '\n')
 		}
 	}
-	binding.Call("respond", w.status, string(head), body, more)
+	status, headLen := uint32(w.status), uint32(len(head)) //nolint:gosec // as bodyLen
+	respond(status, unsafe.Pointer(unsafe.SliceData(head)), headLen, body, bodyLen, flag(more), flag(full))
+	w.body = w.body[:0]
+}
+
+// flag is b as respond and write take it.
+func flag(b bool) uint32 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // A header's value is one line: a newline in it would read as the next
 // header.
 var newlines = strings.NewReplacer("\n", " ", "\r", " ")
 
+// cancelRunning cancels the running request's context (a runtime serves one
+// request at a time).
+var cancelRunning context.CancelFunc //nolint:unused // used by a function JavaScript calls
+
 // guard cancels a request's context when its client has gone, and says when
 // this runtime should get no more requests.
 //
-// The client has gone: worker.mjs calls the binding's cancel, which is this
-// request's while it runs (a runtime serves one request at a time). Under
-// workers-go's own request path, which runs one request per runtime,
-// workers.Done says it.
+// The client has gone: worker.mjs calls cancelRequest. Under workers-go's
+// own request path, which runs one request per runtime, workers.Done says
+// it.
 //
 // No more requests: a runtime is reused only while its heap has room for
 // another request without the collector running, as a collection in a full
-// heap costs more CPU than starting a new runtime. When the room is gone the
-// binding's full is set, and worker.mjs drops the runtime after this answer.
+// heap costs more CPU than starting a new runtime. When the room is gone,
+// full goes with the answer, and worker.mjs drops the runtime after it.
 func guard(h http.Handler) http.Handler {
-	var cancelRequest context.CancelFunc // whichever request is running
-	binding.Set("cancel", js.FuncOf(func(js.Value, []js.Value) any {
-		if cancelRequest != nil {
-			cancelRequest()
-		}
-		return nil
-	}))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithCancel(r.Context())
-		cancelRequest = cancel
+		cancelRunning = cancel
 		defer func() {
-			cancelRequest = nil
+			cancelRunning = nil
 			cancel()
 		}()
 		served++
@@ -238,9 +284,10 @@ func guard(h http.Handler) http.Handler {
 			}()
 		}
 		h.ServeHTTP(w, r.WithContext(ctx))
-		// Reading the heap's state walks its whole block table, so it is done
-		// for the first request and then one in eight, with room kept for the
-		// eight in between: twice what was allocated since the last look.
+		// Reading the heap's state walks its whole block table under
+		// TinyGo's other collectors, so it is done for the first request and
+		// then one in eight, with room kept for the eight in between: twice
+		// what was allocated since the last look.
 		if served%8 != 1 {
 			return
 		}
@@ -250,8 +297,13 @@ func guard(h http.Handler) http.Handler {
 			mostRequest = since
 		}
 		allocated = stats.TotalAlloc
-		if stats.NumGC > 0 || stats.HeapIdle < 2*mostRequest {
-			binding.Set("full", true)
+		// The heap's room: its size, less the collector's own blocks and what
+		// is in use. TinyGo's leaking collector, which never collects, counts
+		// everything allocated as in use, so this is what it has left too.
+		var room uint64
+		if used := stats.GCSys + stats.HeapInuse; used < stats.Sys {
+			room = stats.Sys - used
 		}
+		full = stats.NumGC > 0 || room < 2*mostRequest
 	})
 }

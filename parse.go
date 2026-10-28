@@ -31,6 +31,21 @@ type parseContext struct {
 	// method, built once on first use (after maxIDLen is final).
 	componentIndexOnce sync.Once
 	componentIndex     map[string]componentRef
+
+	// What URLFor and ID work out from the page tree for a page type and a
+	// method, kept: by the first request the tree no longer changes, and
+	// walking it for every call costs most under TinyGo, whose reflect
+	// compares the types.
+	lookupMu sync.RWMutex
+	routes   map[reflect.Type]string // URLFor's pattern for a typed page value
+	ids      map[idKey]string        // ID's and IDTarget's id for a method
+}
+
+// idKey is what idFor's answer for a method depends on.
+type idKey struct {
+	info  *methodInfo // extractMethodInfo's, one per method
+	page  *PageNode   // the page being served
+	rawID bool
 }
 
 // componentRef names one page's component.
@@ -514,6 +529,11 @@ func (p *parseContext) resolveParts(parts []any) (string, error) {
 	if len(parts) == 0 {
 		return "", nil
 	}
+	if len(parts) == 1 {
+		if t := typedPage(parts[0]); t != nil {
+			return p.typeRoute(t, parts[0])
+		}
+	}
 
 	// Phase 1: collect chain-step prefix.
 	chainEnd := len(parts)
@@ -555,6 +575,39 @@ func (p *parseContext) resolveParts(parts []any) (string, error) {
 		pattern += s
 	}
 	return pattern, nil
+}
+
+// typedPage is v's type when v names a page by its type, as findPageNode's
+// last case takes it, or nil.
+func typedPage(v any) reflect.Type {
+	switch v.(type) {
+	case nil, Ref, string, func(*PageNode) bool:
+		return nil
+	}
+	return reflect.TypeOf(v)
+}
+
+// typeRoute is resolveParts' pattern for v, a typed page value of type t:
+// worked out once per type.
+func (p *parseContext) typeRoute(t reflect.Type, v any) (string, error) {
+	p.lookupMu.RLock()
+	route, ok := p.routes[t]
+	p.lookupMu.RUnlock()
+	if ok {
+		return route, nil
+	}
+	node, err := p.findPageNode(v)
+	if err != nil {
+		return "", err
+	}
+	route = node.urlTarget().FullRoute()
+	p.lookupMu.Lock()
+	if p.routes == nil {
+		p.routes = make(map[reflect.Type]string)
+	}
+	p.routes[t] = route
+	p.lookupMu.Unlock()
+	return route, nil
 }
 
 // resolveChain resolves a sequence of page identifiers to a single

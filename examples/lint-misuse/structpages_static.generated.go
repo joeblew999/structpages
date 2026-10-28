@@ -87,8 +87,12 @@ func init() {
 	static.AddMethods(reflect.TypeFor[*itemsIndex](),
 		static.Method{Name: "Page", Expr: (*itemsIndex).Page, Bound: new(itemsIndex).Page, Promoted: true},
 	)
-	static.AddFunctions("main",
+	static.AddFunctions(structpagesStaticPackage{},
 		static.Function{Name: "BadLinks", Func: BadLinks},
 		static.Function{Name: "ParamLinks", Func: ParamLinks},
 	)
 }
+
+// structpagesStaticPackage names this package as the runtime does in this program, for
+// static.AddFunctions: "main" for a command, its import path in a test.
+type structpagesStaticPackage struct{}

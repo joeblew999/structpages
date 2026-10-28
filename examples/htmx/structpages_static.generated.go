@@ -153,9 +153,13 @@ func init() {
 	static.AddMethods(reflect.TypeFor[*throw](),
 		static.Method{Name: "Page", Expr: (*throw).Page, Bound: new(throw).Page, Promoted: true},
 	)
-	static.AddFunctions("main",
+	static.AddFunctions(structpagesStaticPackage{},
 		static.Function{Name: "ErrorComp", Func: ErrorComp},
 		static.Function{Name: "ErrorPage", Func: ErrorPage},
 		static.Function{Name: "Layout", Func: Layout},
 	)
 }
+
+// structpagesStaticPackage names this package as the runtime does in this program, for
+// static.AddFunctions: "main" for a command, its import path in a test.
+type structpagesStaticPackage struct{}

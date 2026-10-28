@@ -657,6 +657,9 @@ type writer struct {
 	g                       *gen
 	buf                     bytes.Buffer
 	reflectName, staticName string
+	// pkgType is the type the file declares for static.AddFunctions to name
+	// its package by, if it has functions to add.
+	pkgType string
 }
 
 func (w *writer) printf(msg string, args ...any) { fmt.Fprintf(&w.buf, msg, args...) }
@@ -683,6 +686,11 @@ func (g *gen) file(pages []pageType, funcs []*types.Func) ([]byte, error) {
 	out.WriteString(buildTag + "\n" + header + "\npackage " + g.pkg.Name + "\n\n")
 	g.writeImports(&out)
 	out.Write(w.buf.Bytes())
+	if w.pkgType != "" {
+		fmt.Fprintf(&out, "\n// %s names this package as the runtime does in this program, for\n"+
+			"// static.AddFunctions: \"main\" for a command, its import path in a test.\n"+
+			"type %s struct{}\n", w.pkgType, w.pkgType)
+	}
 	src, err := format.Source(out.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("formatting the generated file: %w\n%s", err, out.Bytes())
@@ -820,17 +828,20 @@ func (w *writer) writeMethods(pt pageType, ptr bool) {
 }
 
 // writeFunctions writes the package's standalone components, named as the
-// runtime names them: by import path, "main" for a command.
+// runtime names them: by the package's path in the running program, which a
+// type the file declares tells static.AddFunctions ("main" for a command,
+// but its import path in its test program). A test file's type has a name of
+// its own, as both files can be in one package.
 func (w *writer) writeFunctions(funcs []*types.Func) {
 	if len(funcs) == 0 {
 		return
 	}
 	sort.Slice(funcs, func(i, j int) bool { return funcs[i].Name() < funcs[j].Name() })
-	path := w.g.pkg.PkgPath
-	if w.g.pkg.Name == "main" {
-		path = "main"
+	w.pkgType = "structpagesStaticPackage"
+	if w.g.inTest {
+		w.pkgType = "structpagesStaticTestPackage"
 	}
-	w.printf("%s.AddFunctions(%q,\n", w.staticName, path)
+	w.printf("%s.AddFunctions(%s{},\n", w.staticName, w.pkgType)
 	for _, fn := range funcs {
 		w.printf("%s.Function{Name: %q, Func: %s},\n", w.staticName, fn.Name(), fn.Name())
 	}

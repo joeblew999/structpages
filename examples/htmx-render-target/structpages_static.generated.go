@@ -69,7 +69,7 @@ func init() {
 		static.Method{Name: "Page", Expr: (*dashboard).Page, Bound: new(dashboard).Page, Promoted: true},
 		static.Method{Name: "Props", Expr: (*dashboard).Props, Bound: new(dashboard).Props, Promoted: true},
 	)
-	static.AddFunctions("main",
+	static.AddFunctions(structpagesStaticPackage{},
 		static.Function{Name: "ErrorComp", Func: ErrorComp},
 		static.Function{Name: "ErrorPage", Func: ErrorPage},
 		static.Function{Name: "Html", Func: Html},
@@ -78,3 +78,7 @@ func init() {
 		static.Function{Name: "UserStatsWidget", Func: UserStatsWidget},
 	)
 }
+
+// structpagesStaticPackage names this package as the runtime does in this program, for
+// static.AddFunctions: "main" for a command, its import path in a test.
+type structpagesStaticPackage struct{}

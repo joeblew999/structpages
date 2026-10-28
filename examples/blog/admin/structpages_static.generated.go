@@ -454,7 +454,7 @@ func init() {
 		static.Method{Name: "Page", Expr: (*userListPage).Page, Bound: new(userListPage).Page, Promoted: true},
 		static.Method{Name: "Props", Expr: (*userListPage).Props, Bound: new(userListPage).Props, Promoted: true},
 	)
-	static.AddFunctions("github.com/jackielii/structpages/examples/blog/admin",
+	static.AddFunctions(structpagesStaticPackage{},
 		static.Function{Name: "AdminShellWith", Func: AdminShellWith},
 		static.Function{Name: "LoginShell", Func: LoginShell},
 		static.Function{Name: "PostForm", Func: PostForm},
@@ -464,3 +464,7 @@ func init() {
 		static.Function{Name: "StatsGrid", Func: StatsGrid},
 	)
 }
+
+// structpagesStaticPackage names this package as the runtime does in this program, for
+// static.AddFunctions: "main" for a command, its import path in a test.
+type structpagesStaticPackage struct{}

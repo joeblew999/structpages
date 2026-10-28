@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	static.AddFunctions("github.com/jackielii/structpages/examples/blog/ui/components",
+	static.AddFunctions(structpagesStaticPackage{},
 		static.Function{Name: "Alert", Func: Alert},
 		static.Function{Name: "Button", Func: Button},
 		static.Function{Name: "Card", Func: Card},
@@ -20,3 +20,7 @@ func init() {
 		static.Function{Name: "Textarea", Func: Textarea},
 	)
 }
+
+// structpagesStaticPackage names this package as the runtime does in this program, for
+// static.AddFunctions: "main" for a command, its import path in a test.
+type structpagesStaticPackage struct{}

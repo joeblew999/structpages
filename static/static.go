@@ -129,10 +129,12 @@ func AddMethods(t reflect.Type, ms ...Method) {
 	methods[t] = rms
 }
 
-// AddFunctions adds package-level functions of the package with import
-// path pkgPath ("main" for a command).
-func AddFunctions(pkgPath string, fs ...Function) {
-	prefix := pathToPrefix(pkgPath) + "."
+// AddFunctions adds package-level functions of the package pkg, a value of a
+// type declared in it, belongs to. Its type says the package's path as the
+// runtime names the package's functions in this program: "main" for a
+// command, but its import path in the command's test program.
+func AddFunctions(pkg any, fs ...Function) {
+	prefix := pathToPrefix(reflect.TypeOf(pkg).PkgPath()) + "."
 	for _, f := range fs {
 		setName(Key(reflect.ValueOf(f.Func)), prefix+f.Name)
 	}

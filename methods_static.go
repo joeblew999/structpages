@@ -8,11 +8,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jackielii/structpages/generated"
+	"github.com/jackielii/structpages/static"
 )
 
 // What structpages reads about functions and methods comes from the code
-// structpages generate writes (package generated), because TinyGo can't: its reflect
+// structpages generate writes (package static), because TinyGo can't: its reflect
 // panics as unimplemented in Type.Method, MethodByName, In, Out and
 // Value.Call (https://github.com/tinygo-org/tinygo/issues/3862), and its
 // runtime.FuncForPC returns nil
@@ -29,8 +29,8 @@ import (
 
 // funcTable is t's generated entry. Mount checks every type it will call
 // (checkFuncType, typeMethods), so a missing one here is a bug.
-func funcTable(t reflect.Type) *generated.FuncType {
-	ft, ok := generated.LookupFuncType(t)
+func funcTable(t reflect.Type) *static.FuncType {
+	ft, ok := static.LookupFuncType(t)
 	if !ok {
 		panic(fmt.Sprintf("structpages: no generated code for function type %s; run go tool structpages generate", t))
 	}
@@ -51,7 +51,7 @@ func funcCall(fn reflect.Value, in []reflect.Value) []reflect.Value {
 // checkFuncType reports whether funcIn, funcOut and funcCall work for
 // functions of type t: whether structpages generate wrote code for it.
 func checkFuncType(t reflect.Type) error {
-	if _, ok := generated.LookupFuncType(t); !ok {
+	if _, ok := static.LookupFuncType(t); !ok {
 		return fmt.Errorf("no generated code for function type %s; run go tool structpages generate", t)
 	}
 	return nil
@@ -59,15 +59,15 @@ func checkFuncType(t reflect.Type) error {
 
 // funcKey identifies fn's code: the same for every value of one function,
 // method expression or method value, whatever its receiver.
-func funcKey(fn reflect.Value) uintptr { return generated.Key(fn) }
+func funcKey(fn reflect.Value) uintptr { return static.Key(fn) }
 
 // funcName is the runtime's name for fn's code, such as
 // "example.com/app.(*page).Content-fm", or "" when no generated code has it.
-func funcName(fn reflect.Value) string { return generated.Name(fn) }
+func funcName(fn reflect.Value) string { return static.Name(fn) }
 
 // typeMethods lists t's exported methods, as t.Method does.
 func typeMethods(t reflect.Type) ([]reflect.Method, error) {
-	ms, ok := generated.Methods(t)
+	ms, ok := static.Methods(t)
 	if !ok {
 		if embedded, ok := embeddedMethods(t); ok {
 			return embedded, nil
@@ -146,7 +146,7 @@ func embeddedMethods(t reflect.Type) ([]reflect.Method, bool) {
 
 // methodByName finds t's exported method name, as t.MethodByName does.
 func methodByName(t reflect.Type, name string) (reflect.Method, bool) {
-	if m, ok := generated.MethodByName(t, name); ok {
+	if m, ok := static.MethodByName(t, name); ok {
 		return m, true
 	}
 	ms, _ := embeddedMethods(t)
@@ -162,5 +162,5 @@ func methodByName(t reflect.Type, name string) (reflect.Method, bool) {
 // (see methods_dynamic.go). Methods listed from embedded fields alone carry
 // no Func and are all promoted.
 func isPromotedMethod(method *reflect.Method) bool {
-	return !method.Func.IsValid() || generated.IsPromoted(method.Func)
+	return !method.Func.IsValid() || static.IsPromoted(method.Func)
 }

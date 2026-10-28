@@ -1,4 +1,4 @@
-// Package generated holds what structpages reads about an app's functions
+// Package static holds what structpages reads about an app's functions
 // and methods in its static builds, in place of method reflection: under
 // TinyGo, whose reflect can't list or call a type's methods, read a function
 // type's parameters and results, or name a function, and on the standard
@@ -12,7 +12,7 @@
 //
 // Every Add function is for init functions: what they add is read without
 // locking once the program runs.
-package generated
+package static
 
 import (
 	"cmp"

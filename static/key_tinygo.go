@@ -1,6 +1,6 @@
 //go:build tinygo
 
-package generated
+package static
 
 import (
 	"reflect"

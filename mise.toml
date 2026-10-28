@@ -136,6 +136,8 @@ echo "Every generated file is committed."
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
 # Builds go in examples/todo/build/ (gitignored). `mise tasks deps example:todo:serve:static` prints a chain.
+# The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
+# log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
 [tasks."example:todo:generate:gsx"]
 description = "todo: gsx makes the .x.go files."

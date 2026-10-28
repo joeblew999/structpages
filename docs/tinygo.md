@@ -22,8 +22,9 @@ It writes `structpages_tables.go` into each package that declares pages, standal
 providers. Only TinyGo builds the file (`//go:build tinygo || structpages_tables`), so the standard toolchain
 ignores it.
 
-- Commit it, as you would gsx's `.x.go`, and run the generator again whenever a page's methods change. In gsx
-  projects run it after `go tool gsx generate`: page components are methods in the generated `.x.go`.
+- Commit it, as you would gsx's `.x.go`, or generate it in your build before compiling. Either way, run the
+  generator again whenever a page's methods change. In gsx projects run it after `go tool gsx generate`: page
+  components are methods in the generated `.x.go`.
 - A stale table fails at `Mount`, naming the type: `no method table for app.page; run go tool structpages-gen`.
 - If some files build only under TinyGo, or never under it, pass `-tags tinygo` so the tables match what TinyGo
   compiles.

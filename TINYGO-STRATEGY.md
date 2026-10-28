@@ -77,7 +77,7 @@ Apple M2 Pro:
 - **TinyGo vs Go, reflection: about 3.4× the time and 2–3× the bytes.** Generated costs about the same as reflection
   on Go, so this gap is TinyGo's compiler, runtime and garbage collector, not structpages. A simple GET is 2.5µs. These
   TinyGo runs are native binaries, not WebAssembly.
-- **A real page** (`mise run bench:examples`, into [examples/todo/BENCH.GENERATED.md](./examples/todo/BENCH.GENERATED.md)):
+- **A real page** (`mise run bench:examples`, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md)):
   `todo`'s `GET /` takes 9.6µs with reflection, **7.4µs generated (23% faster, a fifth fewer allocations)**, and
   30µs under TinyGo.
 
@@ -169,7 +169,7 @@ In order:
 mise run test:tinygo -v           # library: what TinyGo still skips, and why
 mise run examples                # every example's tests three ways, as a grid
 mise run example:todo:serve:tinygo  # serve todo as WebAssembly in workerd (and :serve:reflect, :serve:generated)
-mise run bench:examples           # every example's pages three ways, into its BENCH.GENERATED.md
+mise run bench:examples           # every example's pages three ways, into its BENCH_GENERATED.md
 mise run bench:compare            # Go, reflection vs Go, generated vs TinyGo, into BENCH-COMPARE.GENERATED.md
 mise run ci:go                    # everything upstream's CI checks on Go
 ```

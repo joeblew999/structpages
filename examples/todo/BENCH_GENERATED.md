@@ -8,7 +8,7 @@ BenchmarkCheck (check_test.go) times each GET that todo's check recorded (testda
 - generated: standard Go, reading generated code instead (-tags structpages_tables)
 - tinygo: TinyGo, which reads the generated code too
 
-Commit 19b9c05 + uncommitted changes, 2026-10-28T07:22Z.
+Commit 135be13 + uncommitted changes, 2026-10-28T07:42Z.
 go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
 6 runs of 200ms each.
 
@@ -17,9 +17,9 @@ go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
 Each way's test binary calls the app's handler directly (TinyGo's natively, and it reports no allocs/op).
 
 ```
-           │   reflect   │             generated              │                tinygo                │
-           │   sec/op    │   sec/op     vs base               │    sec/op     vs base                │
-Check/GET_   9.663µ ± 7%   7.308µ ± 7%  -24.38% (p=0.002 n=6)   33.745µ ± 1%  +249.22% (p=0.002 n=6)
+           │   reflect    │             generated              │                tinygo                 │
+           │    sec/op    │   sec/op     vs base               │    sec/op      vs base                │
+Check/GET_   10.001µ ± 3%   7.627µ ± 3%  -23.74% (p=0.002 n=6)   33.364µ ± 13%  +233.62% (p=0.002 n=6)
 
            │   reflect    │              generated              │                tinygo                │
            │     B/op     │     B/op      vs base               │     B/op      vs base                │
@@ -32,17 +32,17 @@ Check/GET_   169.0 ± 0%   133.0 ± 0%  -21.30% (p=0.002 n=6)
 
 ## As served
 
-Each way served on :8080 as its example:todo task serves it (tinygo: 1496 KB WebAssembly in workerd, what
+Each way served on :8080 as its example:todo:serve:<way> task serves it (tinygo: 1496 KB WebAssembly in workerd, what
 Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
 
 ```
-           │   reflect   │             generated             │                 tinygo                 │
-           │   sec/op    │   sec/op     vs base              │    sec/op      vs base                 │
-Check/GET_   66.38µ ± 1%   63.05µ ± 1%  -5.01% (p=0.002 n=6)   1591.08µ ± 4%  +2296.85% (p=0.002 n=6)
+           │   reflect   │           generated            │                 tinygo                  │
+           │   sec/op    │    sec/op      vs base         │     sec/op      vs base                 │
+Check/GET_   73.67µ ± 5%   70.26µ ± 158%  ~ (p=0.240 n=6)   2542.89µ ± 52%  +3351.78% (p=0.002 n=6)
 
-           │   reflect    │           generated           │               tinygo               │
-           │     B/op     │     B/op      vs base         │     B/op      vs base              │
-Check/GET_   45.82Ki ± 0%   45.82Ki ± 0%  ~ (p=0.387 n=6)   45.77Ki ± 0%  -0.10% (p=0.002 n=6)
+           │   reflect    │           generated           │            tinygo             │
+           │     B/op     │     B/op      vs base         │     B/op      vs base         │
+Check/GET_   45.82Ki ± 0%   45.82Ki ± 0%  ~ (p=0.589 n=6)   45.78Ki ± 0%  ~ (p=0.063 n=6)
 
            │  reflect   │           generated           │              tinygo              │
            │ allocs/op  │ allocs/op   vs base           │ allocs/op   vs base              │

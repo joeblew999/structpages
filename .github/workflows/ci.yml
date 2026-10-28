@@ -106,6 +106,7 @@ jobs:
           go vet -C tools/check ./...
           go vet -C workers ./...
           go vet -C tools/workers ./...
+          go vet -C tools/check/cmd/structpages-check ./...
 
       # Note: staticcheck is handled by golangci-lint job with proper test exclusions
 
@@ -153,6 +154,13 @@ jobs:
         with:
           version: latest
           working-directory: tools/workers
+          args: --timeout=5m
+
+      - name: golangci-lint (tools/check/cmd/structpages-check)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          working-directory: tools/check/cmd/structpages-check
           args: --timeout=5m
 
   test-examples:

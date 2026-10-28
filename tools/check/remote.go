@@ -15,5 +15,7 @@ func remote(tb testing.TB, base string) http.Handler {
 	if err != nil {
 		tb.Fatalf("check: %s: %v", URLEnv, err)
 	}
-	return httputil.NewSingleHostReverseProxy(u)
+	// CHECK_URL is set by the mise task running the benchmark, to the local server it started.
+	return httputil.NewSingleHostReverseProxy(u) //nolint:gosec // not user input: see above
+
 }

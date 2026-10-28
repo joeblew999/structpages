@@ -1,33 +1,33 @@
-// Command structpages-dev builds, tests, benchmarks and serves one folder
-// (the structpages library, ., or an app, such as examples/todo) the three
-// ways structpages runs: reflect (the standard build), generated (the
-// standard toolchain with -tags structpages_generated, reading the code
-// structpages-gen writes instead of method reflection) and tinygo (which
-// always reads that code):
+// Command structpages-dev builds, tests, benchmarks and serves one folder of
+// this repository (the structpages library, ., or an example, such as
+// examples/todo) the three ways structpages runs: reflect (the standard
+// build), generated (the standard toolchain with -tags structpages_generated,
+// reading the code structpages-gen writes instead of method reflection) and
+// tinygo (which always reads that code):
 //
 //	structpages-dev [-C dir] test [-ways reflect,generated,tinygo] folder
 //	structpages-dev [-C dir] bench folder
 //	structpages-dev [-C dir] serve folder reflect|generated|tinygo
 //
-// Each job does the same steps every way: generate the code the way needs
-// (generated and tinygo), build, then test, benchmark or serve, and delete
-// what it generated and built when done. Which folders to run it on is the
-// caller's to say: in this repository, mise.toml lists them.
+// It is this repository's, run by its mise.toml, and it generates nothing:
+// each folder's generate task there makes the folder's generated files first,
+// in order, and the tasks running structpages-dev depend on it. Which folders
+// to run it on is mise.toml's to say too. An app outside this repository uses
+// the pieces directly: structpages-gen, the e2e package, workers and
+// structpages-workers (docs/generated.md, docs/tinygo.md).
 //
-// test builds every package and runs the tests (with the race detector,
-// which TinyGo lacks), regenerating gsx output from scratch first and
-// failing if the committed .x.go files are stale, and prints a line: how
-// many passed each way, every test skipped with why, and the failing tests'
-// own output. bench runs the folder's benchmarks in-process and, for an app
-// serving through workers.Serve, as served, and writes the folder's
-// BENCH_GENERATED.md. serve serves an app on :8080 until Ctrl-C: go run on
-// the standard toolchain, and under TinyGo a Worker in workerd.
+// test builds every package and runs the tests each way (with the race
+// detector, which TinyGo lacks), and prints a line: how many passed each way,
+// then every test skipped with why, and the failing tests' own output. bench
+// runs the folder's benchmarks in-process and, for an app serving through
+// workers.Serve, as served, and writes the folder's BENCH_GENERATED.md. serve
+// serves an app on :8080 until Ctrl-C: go run on the standard toolchain, and
+// under TinyGo a Worker in workerd, built into a temporary folder that
+// stopping deletes.
 package main
 
 import (
-	"bufio"
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -35,7 +35,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -43,6 +42,9 @@ import (
 var ways = []string{"reflect", "generated", "tinygo"}
 
 const generatedTag = "structpages_generated"
+
+// root is the repository's root folder, the one with tools/gen.
+var root string
 
 func main() {
 	dir := flag.String("C", "", "change to `dir` before anything else, as go -C does")
@@ -58,6 +60,12 @@ func main() {
 			fail(err)
 		}
 	}
+	r, ok := repoRoot()
+	if !ok {
+		fail(fmt.Errorf("it runs inside the structpages repository, from its mise.toml; " +
+			"an app of your own uses structpages-gen and the e2e package directly"))
+	}
+	root = r
 	if flag.NArg() == 0 {
 		flag.Usage()
 		os.Exit(2)
@@ -134,27 +142,11 @@ func (f folder) hasTests() bool {
 	return found
 }
 
-// usesGSX reports whether f's module has gsx as a tool.
-func (f folder) usesGSX() bool {
-	mod, err := os.ReadFile(filepath.Join(f.dir, "go.mod"))
-	return err == nil && bytes.Contains(mod, []byte("gsxhq/gsx/cmd/gsx"))
-}
-
 // servesWorkers reports whether f's module serves through workers.Serve,
 // which a TinyGo build needs to run as a Worker.
 func (f folder) servesWorkers() bool {
 	mod, err := os.ReadFile(filepath.Join(f.dir, "go.mod"))
 	return err == nil && bytes.Contains(mod, []byte("structpages/workers "))
-}
-
-// cleanGenerated deletes the code structpages-gen wrote in f.
-func (f folder) cleanGenerated() {
-	f.walk(func(path string) {
-		if base := filepath.Base(path); strings.HasPrefix(base, "structpages") && strings.Contains(base, ".generated") &&
-			strings.HasSuffix(base, ".go") {
-			_ = os.Remove(path)
-		}
-	})
 }
 
 // onInterrupt runs cleanup and exits if the run is interrupted (Ctrl-C).
@@ -177,43 +169,6 @@ func run(dir, name string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// generate writes the code a way needs for f, with its tests' (-test), and
-// the TinyGo files when tinygo is set.
-func generate(f folder, tinygo bool) error { return generateWith(f, tinygo, true) }
-
-// generateWith runs structpages-gen on f: in this repository from tools/gen,
-// elsewhere the app's own go tool.
-func generateWith(f folder, tinygo, tests bool) error {
-	var args []string
-	if tests {
-		args = append(args, "-test")
-	}
-	if tinygo {
-		args = append(args, "-tags", "tinygo")
-	}
-	var out string
-	var err error
-	if root, ok := repoRoot(); ok {
-		gen := []string{"run", "-C", filepath.Join(root, "tools", "gen"), "./cmd/structpages-gen", "-C", f.abs}
-		out, err = run(".", "go", append(gen, append(args, "./...")...)...)
-	} else {
-		out, err = run(f.dir, "go", append([]string{"tool", "structpages-gen"}, append(args, "./...")...)...)
-	}
-	// Its warnings (generic types it found no instantiation of) are not
-	// failures; anything else it says is.
-	var kept []string
-	sc := bufio.NewScanner(strings.NewReader(out))
-	for sc.Scan() {
-		if !strings.Contains(sc.Text(), "structpages-gen: warning") {
-			kept = append(kept, sc.Text())
-		}
-	}
-	if err != nil {
-		return fmt.Errorf("structpages-gen: %w\n%s", err, strings.Join(kept, "\n"))
-	}
-	return nil
-}
-
 // repoRoot is the structpages repository the working directory is in, if
 // it is: the folder with tools/gen.
 func repoRoot() (string, bool) {
@@ -231,36 +186,4 @@ func repoRoot() (string, bool) {
 		}
 		dir = parent
 	}
-}
-
-// gsxGenerate regenerates f's gsx output, from scratch when noCache is set.
-func gsxGenerate(f folder, noCache bool) error {
-	args := []string{"tool", "gsx", "generate", "-q"}
-	if noCache {
-		args = append(args, "-no-cache")
-	}
-	if out, err := run(f.dir, "go", append(args, ".")...); err != nil {
-		return fmt.Errorf("gsx generate: %w\n%s", err, out)
-	}
-	return nil
-}
-
-// staleGSX regenerates f's gsx output from scratch and returns the committed
-// .x.go files that changed.
-func staleGSX(f folder) ([]string, error) {
-	if err := gsxGenerate(f, true); err != nil {
-		return nil, err
-	}
-	out, err := run(f.dir, "git", "status", "--porcelain", "--", ".")
-	if err != nil {
-		return nil, errors.New(out)
-	}
-	var stale []string
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasSuffix(strings.TrimSpace(line), ".x.go") {
-			stale = append(stale, strings.TrimSpace(line))
-		}
-	}
-	sort.Strings(stale)
-	return stale, nil
 }

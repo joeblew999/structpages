@@ -30,7 +30,6 @@ func bench(args []string) int {
 			f.dir)
 		return 2
 	}
-	onInterrupt(f.cleanGenerated)
 	if err := benchFolder(f); err != nil {
 		fmt.Fprintf(os.Stderr, "structpages-dev: %s: %v\n", f.dir, err)
 		return 1
@@ -52,12 +51,6 @@ func hasBenchmarks(f folder) bool {
 }
 
 func benchFolder(f folder) error {
-	defer f.cleanGenerated()
-	if f.usesGSX() {
-		if err := gsxGenerate(f, false); err != nil {
-			return err
-		}
-	}
 	// In-process: each way's own test binary calls the code directly.
 	inProcess := map[string]string{}
 	for _, way := range ways {
@@ -106,14 +99,8 @@ func benchWay(f folder, way string) (string, error) {
 	tool := "go"
 	switch way {
 	case "generated":
-		if err := generate(f, false); err != nil {
-			return "", err
-		}
 		args = append(args, "-tags", generatedTag)
 	case "tinygo":
-		if err := generate(f, true); err != nil {
-			return "", err
-		}
 		tool = "tinygo"
 	}
 	out, err := run(f.dir, tool, append(args, ".")...)

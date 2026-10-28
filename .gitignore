@@ -45,9 +45,8 @@ examples/todo/todo
 examples/htmx-render-target/htmx-render-target-example
 examples/lint-misuse/lint-misuse
 
-# Code structpages-gen writes (named *.generated*.go): for this repo's
-# tests (CI's Generated build: go run -C tools/gen ./cmd/structpages-gen -C "$PWD"
-# -test ./...), and for the examples (mise run gen:examples)
+# Code structpages-gen writes (named *.generated*.go) for this repo's own
+# tests (mise run generate; CI's Generated build). The examples' is
+# committed instead, as their gsx output is.
 /structpages*.generated*.go
 /internal/*/structpages*.generated*.go
-/examples/**/structpages*.generated*.go

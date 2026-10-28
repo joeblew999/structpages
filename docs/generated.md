@@ -30,11 +30,15 @@ It writes `structpages.generated.go` into each package that declares pages, stan
 providers, next to them: generated code can only name a package's unexported types from inside that package. Only
 the generated builds compile it (`//go:build tinygo || structpages_generated`), so the reflect build ignores it.
 
-- Commit it, as you would gsx's `.x.go`, or generate it in your build before compiling. Either way, run the
-  generator again whenever a page's methods change. In gsx projects run it after `go tool gsx generate`: page
-  components are methods in the generated `.x.go`.
-- Stale generated code fails at `Mount`, naming the type: `no generated methods for app.page; run go tool
-  structpages-gen`.
+- Commit it, as you would gsx's `.x.go`, so every build works from a fresh checkout, and have CI regenerate it and
+  fail if anything changed (this repository's examples do both). Or generate it in your build before compiling.
+  Either way, run the generator again whenever a page's methods change.
+- Generate in order, each step reading what the one before wrote: `go tool gsx generate` first in gsx projects
+  (page components are methods in the generated `.x.go`), then structpages-gen, then record an end-to-end test
+  (the `e2e` package) if you have one.
+- Missing generated code fails at `Mount`, naming the type: `no generated methods for app.page; run go tool
+  structpages-gen`. Code generated before a method was added doesn't fail there: the method isn't seen, and the
+  page fails when it uses it. An end-to-end test run the generated way catches that.
 - If some files build only under TinyGo, or never under it, pass `-tags tinygo` so the code matches what TinyGo
   compiles.
 - `-test` also writes `structpages.generated_test.go` for what your `_test.go` files declare.

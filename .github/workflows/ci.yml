@@ -221,6 +221,17 @@ jobs:
             exit 1
           fi
 
+      - name: Generate structpages code and check freshness
+        working-directory: ./examples/${{ matrix.example }}
+        run: |
+          go run -C ../../tools/gen ./cmd/structpages-gen -C "$PWD" -test ./...
+          if [ -n "$(git status --porcelain .)" ]; then
+            echo "::error::committed structpages.generated.go files are stale — run mise run example:${{ matrix.example }}:generate and commit"
+            git status --porcelain .
+            git diff .
+            exit 1
+          fi
+
       - name: Build
         working-directory: ./examples/${{ matrix.example }}
         run: go build ./...

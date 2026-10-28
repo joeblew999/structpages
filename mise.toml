@@ -5,11 +5,22 @@
 #   reflect    standard Go; structpages reads the app's methods through reflect (the default)
 #   generated  standard Go, -tags structpages_generated: it reads code structpages-gen generates instead
 #   tinygo     TinyGo, which always reads the generated code
-# Everything generated is named *.generated* and gitignored (mise run clean:generated deletes it).
 #
-# Most tasks run structpages-dev (tools/dev) on one folder: the library (.) or an example. It does the same steps
-# every way: generate the code the way needs, build, then test, benchmark or serve, and delete what it generated
-# and built. A task over several folders lists them, a line each.
+# THE ORDER. Some files are made from others, so they are made in an order, each step reading what the one before
+# it wrote:
+#   1. gsx              .gsx templates                 -> .x.go                       (the examples using gsx)
+#   2. structpages-gen  the Go code, .x.go included    -> structpages.generated.go    (every folder)
+#   3. e2e              the app, built the reflect way -> testdata/e2e.generated.txt  (the examples with an e2e_test.go)
+#   4. then build, and test, benchmark or serve, any way.
+# Every folder (the library, ., and each example) has a generate task doing 1 to 3 in that order, and every task on
+# a folder depends on its generate task, so mise runs it first: nothing has to be remembered or run by hand.
+#
+# What generate makes is committed for the examples, as upstream commits .x.go: commit it with the code it comes
+# from (generated:check, and so ci:go, fails until you have). A change to testdata/e2e.generated.txt is a change in
+# what the app answers: review its diff. The library's generated files are for its own tests only and gitignored.
+#
+# The other tasks run structpages-dev (tools/dev) on one folder, doing the same steps every way: build, then test,
+# benchmark or serve. A task over several folders lists them, a line each.
 
 [tools]
 go = "1.26"
@@ -22,21 +33,116 @@ golangci-lint = "2"
 [vars]
 # structpages-dev from this repository, working in its root; the folder and what to do follow.
 dev = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}}"
+# structpages-gen from this repository (step 2); -C, the folder, follows.
+gen = "go run -C tools/gen ./cmd/structpages-gen"
 
-# ---- Tests, three ways: the library (the root folder) and each example, the same way ------------------------------
+# ---- Generate: each folder's generated files, in THE ORDER above ---------------------------------------------------
+
+[tasks.generate]
+description = """The library's generated files (step 2), for its own tests' generated and tinygo builds: gitignored. \
+test, bench, vet and lint run it first."""
+run = "{{vars.gen}} -C {{config_root}} -test ./..."
+
+[tasks."examples:generate"]
+description = "Every example's generate task: each example's generated files, in order."
+depends = [
+  "example:blog:generate",
+  "example:html-template:generate",
+  "example:htmx:generate",
+  "example:htmx-render-target:generate",
+  "example:lint-misuse:generate",
+  "example:simple:generate",
+  "example:todo:generate",
+  "example:url-validation:generate",
+]
+
+[tasks."example:blog:generate"]
+description = "examples/blog's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+run = [
+  "go -C examples/blog tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
+  "{{vars.gen}} -C {{config_root}}/examples/blog -test ./...", # 2. -> structpages.generated.go
+]
+
+[tasks."example:html-template:generate"]
+description = "examples/html-template's generated file: structpages.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
+run = [
+  "{{vars.gen}} -C {{config_root}}/examples/html-template -test ./...", # 2. -> structpages.generated.go
+]
+
+[tasks."example:htmx:generate"]
+description = "examples/htmx's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+run = [
+  "go -C examples/htmx tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
+  "{{vars.gen}} -C {{config_root}}/examples/htmx -test ./...", # 2. -> structpages.generated.go
+]
+
+[tasks."example:htmx-render-target:generate"]
+description = "examples/htmx-render-target's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+run = [
+  "go -C examples/htmx-render-target tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
+  "{{vars.gen}} -C {{config_root}}/examples/htmx-render-target -test ./...", # 2. -> structpages.generated.go
+]
+
+[tasks."example:lint-misuse:generate"]
+description = "examples/lint-misuse's generated files, in order: .x.go, then structpages.generated.go. Commit what changes. Never built the generated way (its tests check the linter), but made like every example's."
+run = [
+  "go -C examples/lint-misuse tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
+  "{{vars.gen}} -C {{config_root}}/examples/lint-misuse -test ./...", # 2. -> structpages.generated.go
+]
+
+[tasks."example:simple:generate"]
+description = "examples/simple's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+run = [
+  "go -C examples/simple tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
+  "{{vars.gen}} -C {{config_root}}/examples/simple -test ./...", # 2. -> structpages.generated.go
+]
+
+[tasks."example:todo:generate"]
+description = "examples/todo's generated files, in order: .x.go, then structpages.generated.go, then testdata/e2e.generated.txt. Commit what changes."
+run = [
+  "go -C examples/todo tool gsx generate -q -no-cache .",          # 1. .gsx -> .x.go
+  "{{vars.gen}} -C {{config_root}}/examples/todo -test ./...",     # 2. -> structpages.generated.go
+  "E2E_UPDATE=1 go -C examples/todo test -count=1 -run TestE2E .", # 3. reflect -> testdata/e2e.generated.txt
+]
+
+[tasks."example:url-validation:generate"]
+description = "examples/url-validation's generated file: structpages.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
+run = [
+  "{{vars.gen}} -C {{config_root}}/examples/url-validation -test ./...", # 2. -> structpages.generated.go
+]
+
+[tasks."generated:check"]
+description = """Every generate task, then fail if a generated file the examples commit (.x.go, \
+structpages.generated.go, testdata/e2e.generated.txt) changed or is new and isn't added to git: commit it with the code \
+it comes from. CI checks the same on a fresh checkout."""
+depends = ["generate", "examples:generate"]
+run = '''
+changed=$(git status --porcelain --untracked-files=all -- '*.x.go' '*.generated.go' '*.generated_test.go' '*.generated.txt' | grep '^.[^ ]' || true)
+if [ -n "$changed" ]; then
+  echo "These generated files changed and aren't added to git: commit them with the code they come from."
+  echo "$changed"
+  exit 1
+fi
+echo "Every generated file is committed."
+'''
+
+# ---- Tests, three ways: the library and each example, the same way -------------------------------------------------
 #
-# An example's e2e_test.go crawls its app (the e2e package) and compares every response with testdata/e2e.generated.txt,
-# recorded from reflect. lint-misuse is a linter fixture: its tests check the linter.
+# An example's e2e_test.go crawls its app (the e2e package) and compares every response with
+# testdata/e2e.generated.txt, recorded from reflect in its generate task. lint-misuse is a linter fixture: its tests
+# check the linter.
 
 [tasks.test]
 description = """The library's tests three ways (reflect and generated with the race detector, which TinyGo lacks): \
 a line with how many passed each way, then every test skipped, with why, and the first lines of any failure."""
+depends = ["generate"]
 quiet = true
 run = "{{vars.dev}} test ."
 
 [tasks.examples]
 description = """Every example's tests three ways, as test does for the library: a line each, and "no tests" for an \
 example with none yet. examples/todo alone: example:todo:test."""
+depends = ["examples:generate"]
 quiet = true
 run = [
   "{{vars.dev}} test examples/blog",
@@ -50,124 +156,134 @@ run = [
 
 [tasks."example:todo:test"]
 description = "examples/todo's tests three ways: reflect, generated, tinygo."
+depends = ["example:todo:generate"]
 quiet = true
 run = "{{vars.dev}} test examples/todo"
-
-[tasks."examples:record"]
-description = """Record examples/todo's e2e test (testdata/e2e.generated.txt) from reflect: the reference the other two \
-ways are compared with. Review the diff before committing it."""
-run = [
-  "go -C examples/todo tool gsx generate -q .",
-  "E2E_UPDATE=1 go -C examples/todo test -count=1 -run TestE2E .",
-  "git status --short -- examples/todo",
-]
 
 # ---- Serving an example on http://localhost:8080 until Ctrl-C, each way --------------------------------------------
 #
 # Under tinygo the app is WebAssembly in workerd, for an example that serves through workers.Serve, as todo does
-# (a TinyGo build can't listen on a socket). Ctrl-C deletes what was generated and built.
+# (a TinyGo build can't listen on a socket): structpages-dev builds it into a temporary folder (workers-go's glue,
+# structpages-workers' worker.mjs and config.capnp, then tinygo build) and Ctrl-C deletes it.
 
 [tasks."example:blog:serve:reflect"]
 description = "Serve examples/blog on :8080, reflect."
+depends = ["example:blog:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/blog reflect"
 
 [tasks."example:blog:serve:generated"]
 description = "Serve examples/blog on :8080, generated."
+depends = ["example:blog:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/blog generated"
 
 [tasks."example:html-template:serve:reflect"]
 description = "Serve examples/html-template on :8080, reflect."
+depends = ["example:html-template:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/html-template reflect"
 
 [tasks."example:html-template:serve:generated"]
 description = "Serve examples/html-template on :8080, generated."
+depends = ["example:html-template:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/html-template generated"
 
 [tasks."example:htmx:serve:reflect"]
 description = "Serve examples/htmx on :8080, reflect."
+depends = ["example:htmx:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/htmx reflect"
 
 [tasks."example:htmx:serve:generated"]
 description = "Serve examples/htmx on :8080, generated."
+depends = ["example:htmx:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/htmx generated"
 
 [tasks."example:htmx-render-target:serve:reflect"]
 description = "Serve examples/htmx-render-target on :8080, reflect."
+depends = ["example:htmx-render-target:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/htmx-render-target reflect"
 
 [tasks."example:htmx-render-target:serve:generated"]
 description = "Serve examples/htmx-render-target on :8080, generated."
+depends = ["example:htmx-render-target:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/htmx-render-target generated"
 
 [tasks."example:simple:serve:reflect"]
 description = "Serve examples/simple on :8080, reflect."
+depends = ["example:simple:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/simple reflect"
 
 [tasks."example:simple:serve:generated"]
 description = "Serve examples/simple on :8080, generated."
+depends = ["example:simple:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/simple generated"
 
 [tasks."example:todo:serve:reflect"]
 description = "Serve examples/todo on :8080, reflect."
+depends = ["example:todo:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/todo reflect"
 
 [tasks."example:todo:serve:generated"]
 description = "Serve examples/todo on :8080, generated."
+depends = ["example:todo:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/todo generated"
 
 [tasks."example:todo:serve:tinygo"]
 description = "Serve examples/todo on :8080, tinygo: WebAssembly in workerd."
+depends = ["example:todo:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/todo tinygo"
 
 [tasks."example:url-validation:serve:reflect"]
 description = "Serve examples/url-validation on :8080, reflect."
+depends = ["example:url-validation:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/url-validation reflect"
 
 [tasks."example:url-validation:serve:generated"]
 description = "Serve examples/url-validation on :8080, generated."
+depends = ["example:url-validation:generate"]
 raw = true
 quiet = true
 run = "{{vars.dev}} serve examples/url-validation generated"
 
-# ---- Benchmarks, three ways: the library (the root folder) and each example, the same way -------------------------
+# ---- Benchmarks, three ways: the library and each example, the same way --------------------------------------------
 
 [tasks.bench]
 description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
 BENCH_GENERATED.md."""
+depends = ["generate"]
 quiet = true
 run = "{{vars.dev}} bench ."
 
 [tasks."bench:examples"]
 description = """Every example with benchmarks (examples/todo, so far), three ways, in-process and as served, each into \
 its own BENCH_GENERATED.md, as bench does for the library. examples/todo alone: example:todo:bench."""
+depends = ["example:todo:generate"]
 quiet = true
 run = [
   "{{vars.dev}} bench examples/todo",
@@ -175,29 +291,15 @@ run = [
 
 [tasks."example:todo:bench"]
 description = "examples/todo's benchmarks three ways, into examples/todo/BENCH_GENERATED.md."
+depends = ["example:todo:generate"]
 quiet = true
 run = "{{vars.dev}} bench examples/todo"
 
-# ---- The repo's two tools, over every example -------------------------------------------------------------------
-
-[tasks."gen:examples"]
-description = """structpages-gen (tools/gen) over every example: regenerates gsx output, then writes \
-structpages.generated.go into each package with pages, and lists what it wrote."""
-run = '''
-fail=0
-for d in examples/*/; do
-  echo "== $d"
-  if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then
-    (cd "$d" && go tool gsx generate -q .) || fail=1
-  fi
-  go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" ./... || fail=1
-  find "$d" -name 'structpages*.generated*.go' | sed 's/^/   generated: /'
-done
-exit $fail
-'''
+# ---- structpages-lint (tools/lint) over every example ----------------------------------------------------------------
 
 [tasks."lint:examples"]
 description = "structpages-lint (tools/lint) over every example but lint-misuse, whose misuses are deliberate."
+depends = ["examples:generate"]
 dir = "tools/lint"
 run = '''
 fail=0
@@ -210,16 +312,12 @@ done
 exit $fail
 '''
 
-[tasks."clean:generated"]
-description = "Delete everything generated: the structpages*.generated*.go files, if a run was stopped before it could."
-run = "find . -name 'structpages*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'"
-
 # ---- What upstream's CI checks, on standard Go --------------------------------------------------------------------
 
 [tasks."ci:go"]
-description = """Everything CI checks on standard Go: fmt, vet, lint, then the library and every example built and \
-tested the reflect way, as test and examples do."""
-depends = ["fmt", "vet", "lint"]
+description = """Everything CI checks on standard Go: fmt, vet, lint, generated:check, then the library and every \
+example built and tested the reflect way, as test and examples do."""
+depends = ["fmt", "vet", "lint", "generated:check"]
 quiet = true
 run = [
   "{{vars.dev}} test -ways reflect .",
@@ -235,12 +333,14 @@ run = [
 
 [tasks.fmt]
 description = "Fail if any file needs gofmt (CI's Format job)."
+wait_for = ["generate", "examples:generate"] # not while they write files, when ci:go runs them too
 run = 'test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }'
 
 # vet and lint check each module, and again with the build tags that pick other files: the library's generated and
-# tinygo files (e2e's among them) and the workers module's js/wasm one, which TinyGo builds.
-
+# tinygo files (e2e's among them, and the library's generated test files, so they run after generate) and the workers
+# module's js/wasm one, which TinyGo builds.
 [tasks.vet]
+depends = ["generate"]
 description = "go vet on the library, workers, tools/gen, tools/dev and tools/workers, each build too (CI's Format job)."
 run = [
   "go vet ./...",
@@ -254,6 +354,7 @@ run = [
 ]
 
 [tasks.lint]
+depends = ["generate"]
 description = "golangci-lint on the library, workers, tools/gen, tools/dev and tools/workers, each build too (CI's Lint job)."
 run = [
   "golangci-lint run --timeout=5m",

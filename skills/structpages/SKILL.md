@@ -503,10 +503,12 @@ go tool structpages-gen ./...              # writes structpages.generated.go in 
 go tool structpages-gen -tags tinygo ./... # when some files build only under TinyGo, or never under it
 ```
 
-- Run it after `go tool gsx generate`: page components are methods in the generated `.x.go`.
+- Run it after `go tool gsx generate`: page components are methods in the generated `.x.go`. Record an e2e
+  test after both.
 - Run it again whenever a page's methods, a `Props` or handler signature, a request-arg provider or a
-  standalone component changes. Stale generated code fails at `Mount`, naming the type: `no generated methods
-  for app.page; run go tool structpages-gen`. That message means regenerate, not edit.
+  standalone component changes. Missing generated code fails at `Mount`, naming the type: `no generated methods
+  for app.page; run go tool structpages-gen`. Code from before a method was added misses that method until the
+  page uses it, then fails. Either way: regenerate, not edit.
 - Generate with the build's own tags: code written for one set of files doesn't compile against another.
   `-test` adds what `_test.go` files declare, for `go test -tags structpages_generated` or `tinygo test`.
 - Never edit `structpages.generated.go`. Commit it like gsx's `.x.go`, or generate it in the build.

@@ -26,14 +26,12 @@ func serve(args []string) int {
 	f, way := newFolder(args[0]), args[1]
 	s, err := start(f, way, os.Stdout, false)
 	if err != nil {
-		f.cleanGenerated()
 		fail(err)
 	}
-	onInterrupt(func() { s.stop(); f.cleanGenerated() })
+	onInterrupt(s.stop)
 	fmt.Printf("%s, %s: http://%s%s\nCtrl-C stops it.\n", f.dir, way, addr, s.about)
 	err = <-s.done
 	s.stop()
-	f.cleanGenerated()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "structpages-dev: the server stopped:", err)
 		return 1
@@ -61,8 +59,9 @@ func (s *server) stop() {
 	}
 }
 
-// start generates the code f needs the way asked, builds it and starts it on
-// addr, its output to out. Every way builds into a temporary folder, deleted
+// start builds f the way asked and starts it on addr, its output to out, from
+// the generated files f's generate task made. Every way builds into a
+// temporary folder, deleted
 // when it stops: go run uses its own, to serve; a benchmark (direct) builds
 // into one of this run's and runs the binary directly, so stopping it stops
 // the app itself, not just go run; a TinyGo build is a Worker run in
@@ -72,21 +71,11 @@ func start(f folder, way string, out io.Writer, direct bool) (*server, error) {
 		_ = c.Close()
 		return nil, fmt.Errorf("%s is in use: stop what is on it first", addr)
 	}
-	if f.usesGSX() {
-		if err := gsxGenerate(f, false); err != nil {
-			return nil, err
-		}
-	}
 	var tags []string
 	switch way {
-	case "reflect":
-	case "generated", "tinygo":
-		if err := generateWith(f, way == "tinygo", false); err != nil {
-			return nil, err
-		}
-		if way == "generated" {
-			tags = []string{"-tags", generatedTag}
-		}
+	case "reflect", "tinygo":
+	case "generated":
+		tags = []string{"-tags", generatedTag}
 	default:
 		return nil, fmt.Errorf("the way is reflect, generated or tinygo, not %q", way)
 	}
@@ -172,14 +161,10 @@ func (s *server) buildWorker(f folder) error {
 	return nil
 }
 
-// glueCommand writes structpages-workers' glue into out: from this
-// repository's tools/workers, or elsewhere the published one.
+// glueCommand writes structpages-workers' glue into out, from this
+// repository's tools/workers.
 func glueCommand(out string) []string {
-	if root, ok := repoRoot(); ok {
-		return []string{"go", "run", "-C", filepath.Join(root, "tools", "workers"), "./cmd/structpages-workers", "-o", out}
-	}
-	const published = "github.com/jackielii/structpages/tools/workers/cmd/structpages-workers@latest"
-	return []string{"go", "run", published, "-o", out}
+	return []string{"go", "run", "-C", filepath.Join(root, "tools", "workers"), "./cmd/structpages-workers", "-o", out}
 }
 
 // waitUp waits for the app on addr to answer, as a build can take a while.

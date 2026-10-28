@@ -27,7 +27,6 @@ func test(args []string) int {
 		}
 	}
 	f := newFolder(set.Arg(0))
-	onInterrupt(f.cleanGenerated)
 	if !testFolder(f, chosen) {
 		return 1
 	}
@@ -64,22 +63,8 @@ func (r *result) cell() string {
 // testFolder checks f each way and prints its line; it reports whether all
 // passed.
 func testFolder(f folder, chosen []string) bool {
-	defer f.cleanGenerated()
 	ok := true
 	var reports []string
-	if f.usesGSX() {
-		stale, err := staleGSX(f)
-		switch {
-		case err != nil:
-			ok = false
-			reports = append(reports, fmt.Sprintf("== %s: %v", f.name, err))
-		case len(stale) > 0:
-			ok = false
-			reports = append(reports, fmt.Sprintf(
-				"== %s: committed .x.go files are stale; run go tool gsx generate and commit:\n%s",
-				f.name, strings.Join(stale, "\n")))
-		}
-	}
 	tests := f.hasTests()
 	results := make([]result, 0, len(chosen))
 	for _, way := range chosen {
@@ -130,8 +115,8 @@ func printSkips(results []result) {
 	}
 }
 
-// testWay generates what way needs, builds every package of f, then runs
-// its tests if it has any.
+// testWay builds every package of f one way, then runs its tests if it has
+// any.
 func testWay(f folder, way string, tests bool) result {
 	r := result{way: way}
 	var build, testCmd []string
@@ -148,12 +133,6 @@ func testWay(f folder, way string, tests bool) result {
 			build = []string{"tinygo", "build", "-o", os.DevNull, "."}
 		}
 		testCmd = []string{"tinygo", "test", "-v", "./..."}
-	}
-	if way != "reflect" {
-		if err := generate(f, way == "tinygo"); err != nil {
-			r.report = err.Error()
-			return r
-		}
 	}
 	if build != nil {
 		if out, err := run(f.dir, build[0], build[1:]...); err != nil {

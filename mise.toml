@@ -3,15 +3,15 @@
 #
 # structpages runs three ways, and most tasks come in threes:
 #   dynamic        standard Go, the default: structpages finds the app's methods at run time, with reflect
-#   static         standard Go, -tags structpages_static: they are known at compile time, from the code `structpages-static generate` writes
+#   static         standard Go, -tags structpages_static: they are known at compile time, from the code
+#                  `structpages-static generate` writes
 #   static-worker  a Cloudflare Worker: TinyGo WebAssembly, static too
 #
 # THE ORDER. Some files are made from others, so an example's steps run in an order, each reading what the one
-# before wrote: 1 gsx (.gsx -> .x.go), 2 structpages (structpages-static generate -> structpages_static.generated.go), 3 record (the e2e test
-# from the dynamic build -> testdata/e2e.generated.txt), 4 test, bench or serve (structpages-dev). examples/todo's
-# section below has each step as its own task (generate:gsx, generate:structpages-static, generate:e2e, then test, bench,
-# serve), each depending on the one before. The other examples' generate tasks
-# do their steps 1 and 2 in order until they get todo's shape.
+# before wrote: generate:gsx (.gsx -> .x.go), generate:structpages-static (-> structpages_static.generated.go),
+# generate:e2e (its answers, from the dynamic build -> testdata/e2e.generated.txt), then test, build, serve and bench,
+# each way. Every example's section below has each step as a task of its own, depending on the one before, all of
+# the same shape (html-template and lint-misuse have fewer ways, and say why).
 #
 # What generate makes is committed for the examples, as upstream commits .x.go: commit it with the code it comes
 # from (generated:check, and so ci:go, fails until you have). A change to testdata/e2e.generated.txt is a change in
@@ -64,13 +64,6 @@ depends = [
   "example:url-validation:generate",
 ]
 
-[tasks."example:lint-misuse:generate"]
-description = "examples/lint-misuse's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes. Never built the static way (its tests check the linter), but made like every example's."
-run = [
-  "go -C examples/lint-misuse tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.structpages_static}} -C {{config_root}}/examples/lint-misuse -test ./...", # 2. -> structpages_static.generated.go
-]
-
 [tasks."generated:check"]
 description = """Every generate task, then fail if a generated file the examples commit (.x.go, \
 structpages_static.generated.go, testdata/e2e.generated.txt) changed or is new and isn't added to git: commit it with the code \
@@ -95,7 +88,8 @@ echo "Every generated file is committed."
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# Builds go in examples/blog/build/ (gitignored). `mise tasks deps example:blog:serve:static` prints a chain.
+# Builds go in examples/blog/build/ (gitignored).
+# `mise tasks deps example:blog:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
 # log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
@@ -225,7 +219,8 @@ run = "structpages-dev report"
 #   build (both) -> bench:dynamic -> bench:static -> bench (the report)
 # Dynamic and static only: Go's html/template calls parts of reflect TinyGo lacks ((reflect.Type).NumOut),
 # so it can't run as a Worker.
-# Builds go in examples/html-template/build/ (gitignored). `mise tasks deps example:html-template:serve:static` prints a chain.
+# Builds go in examples/html-template/build/ (gitignored).
+# `mise tasks deps example:html-template:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
 # log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
@@ -322,7 +317,8 @@ run = "structpages-dev report"
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# Builds go in examples/htmx/build/ (gitignored). `mise tasks deps example:htmx:serve:static` prints a chain.
+# Builds go in examples/htmx/build/ (gitignored).
+# `mise tasks deps example:htmx:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
 # log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
@@ -451,7 +447,8 @@ run = "structpages-dev report"
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# Builds go in examples/htmx-render-target/build/ (gitignored). `mise tasks deps example:htmx-render-target:serve:static` prints a chain.
+# Builds go in examples/htmx-render-target/build/ (gitignored).
+# `mise tasks deps example:htmx-render-target:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
 # log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
@@ -571,6 +568,45 @@ depends = ["example:htmx-render-target:build", "example:htmx-render-target:bench
 dir = "examples/htmx-render-target"
 run = "structpages-dev report"
 
+# ---- examples/lint-misuse: its tasks, one per step, in the order they run --------------------------------------------
+#
+# Each task runs in examples/lint-misuse, after the tasks it depends on:
+#   generate:gsx -> generate:structpages-static -> test:dynamic, test:static
+# A fixture for structpages-lint, not an app to serve: its pages are broken on purpose and its main serves nothing,
+# so it has no e2e test, build, serve or bench. No static-worker: its linter test starts processes (go build, then
+# the linter), which TinyGo can't.
+
+[tasks."example:lint-misuse:generate:gsx"]
+description = "lint-misuse: gsx makes the .x.go files."
+dir = "examples/lint-misuse"
+run = "go tool gsx generate"
+
+[tasks."example:lint-misuse:generate:structpages-static"]
+description = "lint-misuse: structpages-static generate makes structpages_static.generated.go."
+depends = ["example:lint-misuse:generate:gsx"]
+dir = "examples/lint-misuse"
+run = "go tool structpages-static generate"
+
+[tasks."example:lint-misuse:generate"]
+description = "lint-misuse: both generate tasks."
+depends = ["example:lint-misuse:generate:structpages-static"]
+
+[tasks."example:lint-misuse:test:dynamic"]
+description = "lint-misuse: test it, dynamic."
+depends = ["example:lint-misuse:generate", "tools:dev"]
+dir = "examples/lint-misuse"
+run = "structpages-dev test dynamic"
+
+[tasks."example:lint-misuse:test:static"]
+description = "lint-misuse: test it, static."
+depends = ["example:lint-misuse:generate", "tools:dev"]
+dir = "examples/lint-misuse"
+run = "structpages-dev test static"
+
+[tasks."example:lint-misuse:test"]
+description = "lint-misuse: test it both ways."
+depends = ["example:lint-misuse:test:dynamic", "example:lint-misuse:test:static"]
+
 # ---- examples/simple: its tasks, one per step, in the order they run -------------------------------------------------
 #
 # Each task runs in examples/simple, after the tasks it depends on:
@@ -580,7 +616,8 @@ run = "structpages-dev report"
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# Builds go in examples/simple/build/ (gitignored). `mise tasks deps example:simple:serve:static` prints a chain.
+# Builds go in examples/simple/build/ (gitignored).
+# `mise tasks deps example:simple:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
 # log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
@@ -709,7 +746,8 @@ run = "structpages-dev report"
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# Builds go in examples/todo/build/ (gitignored). `mise tasks deps example:todo:serve:static` prints a chain.
+# Builds go in examples/todo/build/ (gitignored).
+# `mise tasks deps example:todo:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
 # log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
@@ -838,7 +876,8 @@ run = "structpages-dev report"
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
-# Builds go in examples/url-validation/build/ (gitignored). `mise tasks deps example:url-validation:serve:static` prints a chain.
+# Builds go in examples/url-validation/build/ (gitignored).
+# `mise tasks deps example:url-validation:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
 # log lines show as they are, without the task's name in front of each. It changes nothing about what runs.
 
@@ -955,8 +994,8 @@ run = "structpages-dev report"
 # ---- Tests, three ways: the library and each example, the same way -------------------------------------------------
 #
 # An example's e2e_test.go crawls its app (the e2e package) and compares every response with
-# testdata/e2e.generated.txt, recorded from the dynamic build in its generate task. lint-misuse is a linter fixture: its tests
-# check the linter.
+# testdata/e2e.generated.txt, recorded from the dynamic build in its generate task. lint-misuse is a linter fixture:
+# its tests check the linter.
 
 [tasks.test]
 description = """The library's tests three ways (dynamic and static with the race detector, which TinyGo lacks): \
@@ -966,15 +1005,9 @@ quiet = true
 run = "{{vars.dev}} test ."
 
 [tasks.examples]
-description = """Every example's tests three ways, as test does for the library: a line each, and "no tests" for an \
-example with none yet. examples/todo alone: example:todo:test."""
-depends = ["example:blog:test", "example:html-template:test", "example:htmx:test", "example:htmx-render-target:test", "example:simple:test", "example:todo:test", "example:url-validation:test", "examples:generate"]
-
-# ---- Serving an example on http://localhost:8080 until Ctrl-C, each way --------------------------------------------
-#
-# Dynamic and static here. Only todo serves as static-worker, WebAssembly in workerd, so far: see its section.
-
-# ---- Benchmarks, three ways: the library and each example, the same way --------------------------------------------
+description = """Every example's tests, each the ways it runs (all three, or dynamic and static for html-template and \
+lint-misuse): a line each way. One example: example:<name>:test."""
+depends = ["example:blog:test", "example:html-template:test", "example:htmx:test", "example:htmx-render-target:test", "example:lint-misuse:test", "example:simple:test", "example:todo:test", "example:url-validation:test"]
 
 [tasks.bench]
 description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
@@ -984,9 +1017,17 @@ quiet = true
 run = "{{vars.dev}} bench ."
 
 [tasks."bench:examples"]
-description = """Every example with benchmarks (examples/todo, so far), three ways, in-process and as served, each into \
-its own BENCH_GENERATED.md, as bench does for the library. examples/todo alone: example:todo:bench."""
-depends = ["example:blog:bench", "example:html-template:bench", "example:htmx:bench", "example:htmx-render-target:bench", "example:simple:bench", "example:todo:bench", "example:url-validation:bench"]
+description = """Every example's benchmarks, each into its own BENCH_GENERATED.md, one example after another so no two \
+are timed at once (lint-misuse, a linter fixture, has none). One example: example:<name>:bench."""
+run = [
+  "mise run example:blog:bench",
+  "mise run example:html-template:bench",
+  "mise run example:htmx:bench",
+  "mise run example:htmx-render-target:bench",
+  "mise run example:simple:bench",
+  "mise run example:todo:bench",
+  "mise run example:url-validation:bench",
+]
 
 [tasks."lint:examples"]
 description = "structpages-lint (tools/lint) over every example but lint-misuse, whose misuses are deliberate."
@@ -1008,11 +1049,10 @@ exit $fail
 [tasks."ci:go"]
 description = """Everything CI checks on standard Go: fmt, vet, lint, generated:check, then the library and every \
 example built and tested the dynamic way, as test and examples do."""
-depends = ["fmt", "vet", "lint", "generated:check", "example:blog:test:dynamic", "example:html-template:test:dynamic", "example:htmx:test:dynamic", "example:htmx-render-target:test:dynamic", "example:simple:test:dynamic", "example:todo:test:dynamic", "example:url-validation:test:dynamic"]
+depends = ["fmt", "vet", "lint", "generated:check", "example:blog:test:dynamic", "example:html-template:test:dynamic", "example:htmx:test:dynamic", "example:htmx-render-target:test:dynamic", "example:lint-misuse:test:dynamic", "example:simple:test:dynamic", "example:todo:test:dynamic", "example:url-validation:test:dynamic"]
 quiet = true
 run = [
   "{{vars.dev}} test -ways dynamic .",
-  "{{vars.dev}} test -ways dynamic examples/lint-misuse",
 ]
 
 [tasks.fmt]

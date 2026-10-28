@@ -179,7 +179,7 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 | `mise run parity` | the suite on Go and TinyGo, listing what passes on Go but not on TinyGo |
 | `mise run test` / `test:tables` / `test:tinygo` | the test suite on reflect, on the tables, and under TinyGo |
 | `mise run bench` / `bench:tables` / `bench:tinygo` | the benchmarks the same three ways |
-| `mise run bench:compare` | all three benchmark runs, compared with benchstat into [bench-compare.generated.md](./bench-compare.generated.md) |
+| `mise run bench:compare` | all three benchmark runs, compared with benchstat into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md) |
 | `mise run ci:go` | everything CI checks on standard Go |
 
 On standard Go the tables come out about even with `reflect` overall: faster for `ID`, slower for `Mount` and `URLFor`

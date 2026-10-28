@@ -39,7 +39,7 @@ The 14 skips:
 - **2 function literals** passed to `ID`/`RenderTarget.Is`. The generator can only name declared functions.
 - **1 generic page type.** The generator can't write tables for generic types.
 
-Benchmarks (`mise run bench:compare`, results in [bench-compare.generated.md](./bench-compare.generated.md)), on an
+Benchmarks (`mise run bench:compare`, results in [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md)), on an
 Apple M2 Pro:
 
 - **Tables vs reflect, both on standard Go: about even** (geometric mean 2% faster). Faster where reflect is costly,
@@ -93,6 +93,6 @@ In order:
 ```bash
 mise run parity          # what still differs between Go and TinyGo
 mise run test:tinygo     # the suite under TinyGo
-mise run bench:compare   # reflect vs tables vs TinyGo, written to bench-compare.generated.md
+mise run bench:compare   # reflect vs tables vs TinyGo, written to BENCH-COMPARE.GENERATED.md
 mise run ci:go           # everything upstream's CI checks on standard Go
 ```

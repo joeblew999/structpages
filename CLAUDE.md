@@ -87,8 +87,8 @@ go tool gsx fmt -w .
 
 7. **Method reflection, two builds**: everything structpages reads about methods and functions (a function type's parameters and results, calls, a type's methods, `MethodByName`, promoted methods, the runtime's name for a function) goes through `funcNumIn`/`funcIn`/`funcOut`/`funcCall`/`typeMethods`/`methodByName`/`isPromotedMethod`/`funcName`/`funcKey`
    - `reflect_runtime.go` (the standard build): `reflect` and `runtime.FuncForPC`; never call those directly elsewhere
-   - `reflect_tables.go` (`tinygo || structpages_tables`): the tables in package `tables`, filled by the files structpages-gen (`tools/gen`, its own module) writes, since TinyGo's `reflect` has none of the above (`docs/tinygo.md`)
-   - Tests: `go run -C tools/gen ./cmd/structpages-gen -C "$PWD" -test ./... && go test -tags structpages_tables ./...` runs the suite as TinyGo builds it, on the standard toolchain (CI's Tables build). `tablesBuild` and `skipInTablesBuild` mark the few cases only `reflect` can do
+   - `reflect_generated.go` (`tinygo || structpages_generated`): the generated code in package `generated`, filled by the files structpages-gen (`tools/gen`, its own module) writes, since TinyGo's `reflect` has none of the above (`docs/tinygo.md`)
+   - Tests: `go run -C tools/gen ./cmd/structpages-gen -C "$PWD" -test ./... && go test -tags structpages_generated ./...` runs the suite as TinyGo builds it, on the standard toolchain (CI's Generated build). `generatedBuild` and `skipInTablesBuild` mark the few cases only `reflect` can do
 
 ### Key Design Patterns
 

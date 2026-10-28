@@ -1,5 +1,5 @@
 // Package check tests that an app answers the same however it is built: with
-// reflect, with generated code (-tags structpages_tables), or under TinyGo.
+// reflect, with generated code (-tags structpages_generated), or under TinyGo.
 //
 // Crawl walks an app's http.Handler in-process from "/", following the links,
 // forms and htmx attributes in each HTML response (sending htmx's request

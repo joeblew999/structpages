@@ -1,4 +1,4 @@
-//go:build !tinygo && !structpages_tables
+//go:build !tinygo && !structpages_generated
 
 package structpages
 
@@ -10,7 +10,7 @@ import (
 // What structpages reads about functions and methods goes through these:
 // here from reflect and the runtime, and under TinyGo, whose reflect can't
 // list or call methods or read a function type's parameters, from the
-// tables structpages-gen writes (reflect_tables.go).
+// code structpages-gen writes (reflect_generated.go).
 
 func funcNumIn(t reflect.Type) int               { return t.NumIn() }
 func funcIn(t reflect.Type, i int) reflect.Type  { return t.In(i) }

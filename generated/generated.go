@@ -1,17 +1,18 @@
-// Package tables holds what structpages reads about an app's functions and
-// methods in builds whose reflect package can't: TinyGo's, which can't list
-// or call a type's methods, read a function type's parameters and results,
-// or name a function.
+// Package generated holds what structpages reads about an app's functions
+// and methods in its generated builds, in place of method reflection: under
+// TinyGo, whose reflect can't list or call a type's methods, read a function
+// type's parameters and results, or name a function, and on the standard
+// toolchain with the structpages_generated build tag.
 //
-// structpages-gen writes a file into each package with pages that fills
-// these tables at init, and structpages built with TinyGo (or with the
-// structpages_tables build tag) reads them in place of reflect. Nothing here
-// is meant to be written by hand; see the TinyGo page of the docs, and
-// structpages' reflect_tables.go for when this package can go.
+// structpages-gen writes a file into each package with pages
+// (structpages.generated.go) that fills it in at init, and structpages reads
+// it there instead of reflect. Nothing here is meant to be written by hand;
+// see the docs on generated code, and structpages' reflect_generated.go for
+// when TinyGo needs it no more.
 //
-// Every Add function is for init functions: the tables are read without
+// Every Add function is for init functions: what they add is read without
 // locking once the program runs.
-package tables
+package generated
 
 import (
 	"cmp"
@@ -146,14 +147,14 @@ func setName(k uintptr, name string) {
 	}
 }
 
-// LookupFuncType returns the function type t, if a table added it.
+// LookupFuncType returns the function type t, if generated code added it.
 func LookupFuncType(t reflect.Type) (*FuncType, bool) {
 	ft, ok := funcTypes[t]
 	return ft, ok
 }
 
 // Methods returns t's exported methods sorted by name, as t.Method lists
-// them, if a table added t.
+// them, if generated code added t.
 func Methods(t reflect.Type) ([]reflect.Method, bool) {
 	ms, ok := methods[t]
 	return ms, ok
@@ -172,8 +173,8 @@ func MethodByName(t reflect.Type, name string) (reflect.Method, bool) {
 }
 
 // Name is the name the runtime gives fn's code, such as
-// "example.com/app.(*page).Content-fm", or "" for a function no table
-// added.
+// "example.com/app.(*page).Content-fm", or "" for a function no
+// generated code added.
 func Name(fn reflect.Value) string { return names[Key(fn)] }
 
 // IsPromoted reports whether fn, the Func of a method from Methods, is one

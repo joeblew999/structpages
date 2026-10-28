@@ -1,6 +1,6 @@
 //go:build tinygo
 
-package tables
+package generated
 
 import (
 	"reflect"

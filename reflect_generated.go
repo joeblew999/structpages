@@ -1,4 +1,4 @@
-//go:build tinygo || structpages_tables
+//go:build tinygo || structpages_generated
 
 package structpages
 
@@ -8,31 +8,31 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jackielii/structpages/tables"
+	"github.com/jackielii/structpages/generated"
 )
 
-// What structpages reads about functions and methods comes from the tables
-// structpages-gen writes (package tables), because TinyGo can't: its reflect
+// What structpages reads about functions and methods comes from the code
+// structpages-gen writes (package generated), because TinyGo can't: its reflect
 // panics as unimplemented in Type.Method, MethodByName, In, Out and
 // Value.Call (https://github.com/tinygo-org/tinygo/issues/3862), and its
 // runtime.FuncForPC returns nil
 // (https://github.com/tinygo-org/tinygo/issues/4379). reflect_runtime.go
-// reads the same from reflect elsewhere; the structpages_tables tag builds
+// reads the same from reflect elsewhere; the structpages_generated tag builds
 // this file on the standard toolchain, to test it there.
 //
 // When a TinyGo release has all of those, delete this file,
-// reflect_tables_test.go, cmpdiff_tinygo_test.go, package tables and
+// reflect_generated_test.go, cmpdiff_tinygo_test.go, package generated and
 // tools/gen, and drop the build constraints from
 // reflect_runtime.go, reflect_runtime_test.go and cmpdiff_test.go (and the
-// tablesBuild checks with them). It is safe when the suite passes under
-// `tinygo test` with no generated tables.
+// generatedBuild checks with them). It is safe when the suite passes under
+// `tinygo test` with no generated code.
 
-// funcTable is t's table. Mount checks every type it will call
+// funcTable is t's generated entry. Mount checks every type it will call
 // (checkFuncType, typeMethods), so a missing one here is a bug.
-func funcTable(t reflect.Type) *tables.FuncType {
-	ft, ok := tables.LookupFuncType(t)
+func funcTable(t reflect.Type) *generated.FuncType {
+	ft, ok := generated.LookupFuncType(t)
 	if !ok {
-		panic(fmt.Sprintf("structpages: no table for function type %s; run go tool structpages-gen", t))
+		panic(fmt.Sprintf("structpages: no generated code for function type %s; run go tool structpages-gen", t))
 	}
 	return ft
 }
@@ -49,30 +49,30 @@ func funcCall(fn reflect.Value, in []reflect.Value) []reflect.Value {
 }
 
 // checkFuncType reports whether funcIn, funcOut and funcCall work for
-// functions of type t: whether structpages-gen wrote its table.
+// functions of type t: whether structpages-gen wrote code for it.
 func checkFuncType(t reflect.Type) error {
-	if _, ok := tables.LookupFuncType(t); !ok {
-		return fmt.Errorf("no table for function type %s; run go tool structpages-gen", t)
+	if _, ok := generated.LookupFuncType(t); !ok {
+		return fmt.Errorf("no generated code for function type %s; run go tool structpages-gen", t)
 	}
 	return nil
 }
 
 // funcKey identifies fn's code: the same for every value of one function,
 // method expression or method value, whatever its receiver.
-func funcKey(fn reflect.Value) uintptr { return tables.Key(fn) }
+func funcKey(fn reflect.Value) uintptr { return generated.Key(fn) }
 
 // funcName is the runtime's name for fn's code, such as
-// "example.com/app.(*page).Content-fm", or "" when no table has it.
-func funcName(fn reflect.Value) string { return tables.Name(fn) }
+// "example.com/app.(*page).Content-fm", or "" when no generated code has it.
+func funcName(fn reflect.Value) string { return generated.Name(fn) }
 
 // typeMethods lists t's exported methods, as t.Method does.
 func typeMethods(t reflect.Type) ([]reflect.Method, error) {
-	ms, ok := tables.Methods(t)
+	ms, ok := generated.Methods(t)
 	if !ok {
 		if embedded, ok := embeddedMethods(t); ok {
 			return embedded, nil
 		}
-		return nil, fmt.Errorf("no method table for %s; run go tool structpages-gen", t)
+		return nil, fmt.Errorf("no generated methods for %s; run go tool structpages-gen", t)
 	}
 	for _, m := range ms {
 		// structpages never calls a promoted method, and the generator
@@ -87,7 +87,7 @@ func typeMethods(t reflect.Type) ([]reflect.Method, error) {
 }
 
 // embeddedMethods lists the methods of t, a struct type or a pointer to one
-// without a table, when they all come from its embedded fields: a struct
+// without generated code, when they all come from its embedded fields: a struct
 // declared inside a function, which can't declare methods and which the
 // generated code can't name, such as a root embedding its pages. They are
 // promoted, so structpages only ever looks them up by name, and they carry
@@ -129,7 +129,7 @@ func embeddedMethods(t reflect.Type) ([]reflect.Method, bool) {
 		}
 	}
 	if t.NumMethod() > len(all) {
-		return nil, false // t declares methods of its own: it needs a table
+		return nil, false // t declares methods of its own: it needs generated code
 	}
 	var ms []reflect.Method
 	for _, m := range all {
@@ -146,7 +146,7 @@ func embeddedMethods(t reflect.Type) ([]reflect.Method, bool) {
 
 // methodByName finds t's exported method name, as t.MethodByName does.
 func methodByName(t reflect.Type, name string) (reflect.Method, bool) {
-	if m, ok := tables.MethodByName(t, name); ok {
+	if m, ok := generated.MethodByName(t, name); ok {
 		return m, true
 	}
 	ms, _ := embeddedMethods(t)
@@ -162,5 +162,5 @@ func methodByName(t reflect.Type, name string) (reflect.Method, bool) {
 // (see reflect_runtime.go). Methods listed from embedded fields alone carry
 // no Func and are all promoted.
 func isPromotedMethod(method *reflect.Method) bool {
-	return !method.Func.IsValid() || tables.IsPromoted(method.Func)
+	return !method.Func.IsValid() || generated.IsPromoted(method.Func)
 }

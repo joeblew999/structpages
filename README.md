@@ -163,13 +163,14 @@ two implementations, picked by build tag:
 | Build | Implementation | Methods come from |
 |---|---|---|
 | standard Go (default) | `reflect_runtime.go` | `reflect`, as before: nothing changes for Go users |
-| TinyGo, or Go with `-tags structpages_tables` | `reflect_tables.go` | tables generated ahead of time by `tools/gen` |
+| TinyGo, or Go with `-tags structpages_generated` | `reflect_generated.go` | code generated ahead of time by `tools/gen` |
 
-The same tests and benchmarks run on both, and the tables build also runs on standard Go, so a problem in the tables
-can be told apart from a TinyGo one. The goal is parity: everything that passes on standard Go passes on TinyGo. What
-is left is routing (TinyGo's `ServeMux` lacks Go 1.22 patterns, so the routing tests skip there), and what the tables
-can't describe: generic page types and function literals. The tables are a stopgap: once TinyGo's `reflect` catches
-up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, and what to remove when.
+So structpages runs three ways: reflect, generated (standard Go without method reflection) and TinyGo (which always
+reads the generated code). The same tests and benchmarks run all three ways, and since the generated build also runs
+on standard Go, a problem in the generated code can be told apart from a TinyGo one. The goal is parity, and the
+library's tests now pass all three ways with nothing skipped: under TinyGo `Mount` routes through its own copy of Go's
+`ServeMux`, since TinyGo's can't route Go 1.22 patterns. What generated code can't describe is a function literal
+passed to `ID`. [docs/tinygo.md](./docs/tinygo.md) says how to use it, and what to remove once TinyGo catches up.
 
 **Running it.** Install [mise](https://mise.jdx.dev), which brings the Go, TinyGo and tool versions in `mise.toml`;
 `mise tasks` lists everything.

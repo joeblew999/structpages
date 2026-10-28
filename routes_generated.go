@@ -1,4 +1,4 @@
-//go:build tinygo || structpages_tables
+//go:build tinygo || structpages_generated
 
 package structpages
 
@@ -17,7 +17,7 @@ import (
 // https://github.com/tinygo-org/net/pull/56, is open). So a TinyGo build
 // registers a mount's routes on internal/servemux, Go 1.26's ServeMux, and
 // hands mux the mount's path with patterns a Go 1.21 mux reads as Go 1.22's
-// does. The structpages_tables build does the same on the standard
+// does. The structpages_generated build does the same on the standard
 // toolchain, so it runs TinyGo's code path in full and only the compiler
 // differs between the two.
 //

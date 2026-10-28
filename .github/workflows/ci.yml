@@ -39,8 +39,8 @@ jobs:
           file: ./coverage.txt
           fail_ci_if_error: false
 
-  tables:
-    name: Tables build
+  generated:
+    name: Generated build
     runs-on: ubuntu-latest
 
     steps:
@@ -51,11 +51,11 @@ jobs:
         with:
           go-version: "1.25"
 
-      - name: Generate the tables
+      - name: Generate the code
         run: go run -C tools/gen ./cmd/structpages-gen -C "$PWD" -test ./...
 
       - name: Run tests without method reflection
-        run: go test -tags structpages_tables ./...
+        run: go test -tags structpages_generated ./...
 
   tinygo:
     name: TinyGo

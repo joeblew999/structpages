@@ -1,7 +1,7 @@
-//go:build !tinygo && !structpages_tables
+//go:build !tinygo && !structpages_generated
 
 package structpages
 
-// tablesBuild reports whether structpages reads methods from generated
-// tables (reflect_tables.go) instead of reflect.
-const tablesBuild = false
+// generatedBuild reports whether structpages reads methods from generated
+// code (reflect_generated.go) instead of reflect.
+const generatedBuild = false

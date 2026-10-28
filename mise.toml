@@ -3,7 +3,7 @@
 #
 # structpages runs three ways, and most tasks come in threes:
 #   reflect    standard Go; structpages reads the app's methods through reflect (the default)
-#   generated  standard Go, -tags structpages_tables: it reads code structpages-gen generates instead
+#   generated  standard Go, -tags structpages_generated: it reads code structpages-gen generates instead
 #   tinygo     TinyGo, which always reads the generated code
 # Everything generated is named *.generated* and gitignored (mise run clean:generated deletes it).
 
@@ -56,7 +56,7 @@ if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generat
 for way in ${usage_way:-reflect generated tinygo}; do
   case $way in
     reflect) cmd=(go test -race -count=1 -v ./...) ;;
-    generated) gen; cmd=(go test -count=1 -tags structpages_tables -v ./...) ;;
+    generated) gen; cmd=(go test -count=1 -tags structpages_generated -v ./...) ;;
     tinygo) gen -tags tinygo; cmd=(tinygo test -v ./...) ;;
     *) echo "the way is reflect, generated or tinygo, not $way" >&2; exit 2 ;;
   esac
@@ -128,7 +128,7 @@ set -eu
 cd "examples/$usage_name"
 if grep -q 'gsxhq/gsx/cmd/gsx' go.mod; then go tool gsx generate -q .; fi
 gen() { go run -C "{{config_root}}/tools/gen" ./cmd/structpages-gen -C "$PWD" "$@" ./...; }
-listgen() { find . -name 'structpages_tables*.generated*.go' | sed 's|^\./|  |'; }
+listgen() { find . -name 'structpages*.generated*.go' | sed 's|^\./|  |'; }
 case "$usage_way" in
 reflect)
   echo "examples/$usage_name, reflect: http://localhost:8080. Ctrl-C stops it."
@@ -137,7 +137,7 @@ generated)
   gen
   echo "examples/$usage_name, generated: http://localhost:8080, reading this generated code instead of reflect:"
   listgen; echo "Ctrl-C stops it."
-  exec go run -tags structpages_tables . ;;
+  exec go run -tags structpages_generated . ;;
 tinygo)
   if ! grep -q 'structpages/workers ' go.mod; then
     echo "examples/$usage_name can't run under TinyGo yet: it needs to serve through the workers module, like examples/todo" >&2; exit 2
@@ -259,7 +259,7 @@ run = "mise run _example url-validation generated"
 
 [tasks."gen:examples"]
 description = """structpages-gen (tools/gen) over every example: regenerates gsx output, then writes \
-structpages_tables.generated.go into each package with pages, and lists what it wrote."""
+structpages.generated.go into each package with pages, and lists what it wrote."""
 run = '''
 fail=0
 for d in examples/*/; do
@@ -268,7 +268,7 @@ for d in examples/*/; do
     (cd "$d" && go tool gsx generate -q .) || fail=1
   fi
   go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" ./... || fail=1
-  find "$d" -name 'structpages_tables*.generated*.go' | sed 's/^/   generated: /'
+  find "$d" -name 'structpages*.generated*.go' | sed 's/^/   generated: /'
 done
 exit $fail
 '''
@@ -288,9 +288,9 @@ exit $fail
 '''
 
 [tasks."clean:generated"]
-description = "Delete everything generated: the structpages_tables*.generated*.go files and the examples' worker.generated/."
+description = "Delete everything generated: the structpages*.generated*.go files and the examples' worker.generated/."
 run = [
-  "find . -name 'structpages_tables*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'",
+  "find . -name 'structpages*.generated*.go' -not -path './.git/*' -print -delete | sed 's/^/deleted /'",
   "find examples -type d -name worker.generated -prune -print -exec rm -rf {} + | sed 's/^/deleted /'",
 ]
 
@@ -332,7 +332,7 @@ if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generat
 
 # In-process: each way's own test binary calls the code directly.
 echo "== $name, in-process: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
-echo "== $name, in-process: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_tables "${flags[@]}" .)
+echo "== $name, in-process: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_generated "${flags[@]}" .)
 echo "== $name, in-process: tinygo..."; gen -tags tinygo
 # TinyGo prints no -N CPU suffix or goos/pkg/cpu lines, and 0 for every allocs/op, so those are left out.
 tinygo=$(cd "$d" && tinygo test "${flags[@]}" . | sed -E 's/[[:space:]]+0 allocs\/op//')
@@ -373,7 +373,7 @@ cat > "$d/BENCH_GENERATED.md" <<EOT
 # $name: benchmarks, three ways
 
 - reflect: standard Go, structpages reading methods through reflect
-- generated: standard Go, reading generated code instead (-tags structpages_tables)
+- generated: standard Go, reading generated code instead (-tags structpages_generated)
 - tinygo: TinyGo, which reads the generated code too
 
 $stamp

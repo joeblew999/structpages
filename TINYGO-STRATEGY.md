@@ -10,7 +10,7 @@ A structpages app runs **three ways**, and behaves the same in each:
 | Way | Toolchain | How structpages reads the app's methods |
 |---|---|---|
 | **Go, reflection** | standard Go | `reflect`, as upstream always has (the default) |
-| **Go, generated** | standard Go, `-tags structpages_tables` | code that `structpages-gen` generates from the app's source |
+| **Go, generated** | standard Go, `-tags structpages_generated` | code that `structpages-gen` generates from the app's source |
 | **TinyGo, generated** | TinyGo, for WebAssembly hosts such as Cloudflare Workers | the same generated code |
 
 Go, generated is a real choice for Go users, not just a way to test TinyGo's code path: an app can run without method
@@ -29,8 +29,8 @@ needs all four, so everything it reads about methods and functions goes through 
 implementations, picked by build tag:
 
 - `reflect_runtime.go` (Go, reflection): `reflect`, exactly as before.
-- `reflect_tables.go` (Go, generated, and TinyGo): what `structpages-gen` (`tools/gen`) generates. It writes
-  `structpages_tables.generated.go` into each package with pages, next to the pages: generated code can only name a
+- `reflect_generated.go` (Go, generated, and TinyGo): what `structpages-gen` (`tools/gen`) generates. It writes
+  `structpages.generated.go` into each package with pages, next to the pages: generated code can only name a
   package's unexported types from inside that package, as with gsx's `.x.go`. The files only build with the tag or
   under TinyGo, so the reflection build ignores them whether they exist or not.
 
@@ -92,7 +92,7 @@ answer is the one the other two must give):
 
 | Pattern | Result |
 |---|---|
-| request-arg provider of a **named function type** (`type P func(*http.Request) (T, error)`) | **was a gap**: worked with reflection, failed at `Mount` generated and under TinyGo. Fixed: the generator writes the named type's table |
+| request-arg provider of a **named function type** (`type P func(*http.Request) (T, error)`) | **was a gap**: worked with reflection, failed at `Mount` generated and under TinyGo. Fixed: the generator writes code for the named type |
 | provider that is a method value (`svc.CurrentUser`) | same all three ways |
 | a page's `RequestArgs` returning a function literal | same all three ways |
 | route fields of an alias type, or a pointer to a page | same all three ways |
@@ -116,7 +116,7 @@ In order:
    - **One differential checker, in-process.** A small Go package that takes a handler, crawls it from `/` through
      `httptest` (following links, forms and htmx attributes, and sending htmx's request headers so partials are
      covered), and records every response. Each example runs it as an ordinary test, so it runs all three ways:
-     `go test`, `go test -tags structpages_tables`, `tinygo test`. The reflection run is the reference: any response
+     `go test`, `go test -tags structpages_generated`, `tinygo test`. The reflection run is the reference: any response
      that differs in the other two is a failure. It finds each example's routes by itself, so there are no per-example
      lists to keep up, and it needs no sockets, so TinyGo can run it.
 
@@ -137,7 +137,7 @@ In order:
 
    **Status: routing works in `Mount`.** `internal/servemux` is Go 1.26's `ServeMux` as Go wrote it, with Go's tests,
    which pass all three ways. In the generated and TinyGo builds `Mount` registers its routes on one and hands the
-   app's mux only the mount's prefix (`routes_tinygo.go`); the reflect build registers on the app's mux as before
+   app's mux only the mount's prefix (`routes_generated.go`); the reflect build registers on the app's mux as before
    (`routes_go.go`). So apps keep `http.NewServeMux()`, and generated and TinyGo differ only in their compiler.
    `workers.Serve` serves on `net/http` or, in a Worker, through workerd, and `tools/workers` writes the Worker's
    JavaScript glue. `todo`'s check passes all three ways, and served in workerd its toggle and delete work and its state
@@ -157,13 +157,13 @@ In order:
    direct calls and cache each method's entry instead of looking it up per call. On TinyGo the cost is TinyGo itself.
 7. **Delete the generated-code support when TinyGo catches up.** Once TinyGo's `reflect` can list and call methods
    ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and name functions
-   ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)), the comment at the top of `reflect_tables.go`
+   ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)), the comment at the top of `reflect_generated.go`
    lists what to remove, if Go, generated isn't worth keeping on its own by then. `mise run test` with no
    generated files is the check.
 
 ## Risks to keep in mind
 
-- `tables/key_tinygo.go` reads TinyGo's internal layout of a function value through `unsafe`. A TinyGo release that
+- `generated/key_tinygo.go` reads TinyGo's internal layout of a function value through `unsafe`. A TinyGo release that
   changes it breaks `ID` silently. The TinyGo test run would catch it, so run it on every TinyGo upgrade.
 - A request-arg provider declared with a named function type (`type P func(*http.Request) (T, error)`) probably gets
   no generated code, so it would work on Go and fail at `Mount` on TinyGo. Untested.

@@ -305,7 +305,7 @@ func TestMethodRenderTarget_Is_EdgeCases(t *testing.T) {
 		t.Error("Should not match when method.Type is nil")
 	}
 
-	if tablesBuild {
+	if generatedBuild {
 		return // the rest builds a method from a function literal, which only reflect can describe
 	}
 

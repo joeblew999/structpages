@@ -34,7 +34,7 @@ func newRequestArg(v any, origin string) (*requestArg, error) {
 			"func(*http.Request, *PageNode) (T, error)", origin, v)
 	}
 	ft := fn.Type()
-	// Without reflect (TinyGo), a function of the right shape has a table.
+	// Without reflect (TinyGo), a function of the right shape has generated code.
 	tableErr := checkFuncType(ft)
 	shapeOK := tableErr == nil && funcNumOut(ft) == 2 && funcOut(ft, 1) == errorType && !funcIsVariadic(ft) &&
 		(funcNumIn(ft) == 1 || (funcNumIn(ft) == 2 && funcIn(ft, 1) == pageNodeType)) &&

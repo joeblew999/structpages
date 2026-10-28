@@ -18,8 +18,8 @@ go get -tool github.com/jackielii/structpages/tools/gen/cmd/structpages-gen@late
 go tool structpages-gen ./...
 ```
 
-It writes `structpages_tables.generated.go` into each package that declares pages, standalone components or request-arg
-providers. Only TinyGo builds the file (`//go:build tinygo || structpages_tables`), so the standard toolchain
+It writes `structpages.generated.go` into each package that declares pages, standalone components or request-arg
+providers. Only TinyGo builds the file (`//go:build tinygo || structpages_generated`), so the standard toolchain
 ignores it.
 
 - Commit it, as you would gsx's `.x.go`, or generate it in your build before compiling. Either way, run the
@@ -33,7 +33,7 @@ ignores it.
 ## Check without TinyGo
 
 ```bash
-go test -tags structpages_tables ./...
+go test -tags structpages_generated ./...
 ```
 
 runs your tests on the standard toolchain with structpages reading the tables instead of `reflect`: the quickest
@@ -55,7 +55,7 @@ TinyGo's `net/http` comes from [tinygo-org/net](https://github.com/tinygo-org/ne
 like Go 1.21's: a pattern with a method (`POST /add`), a wildcard (`{id}`) or `{$}` never matches
 ([net#55](https://github.com/tinygo-org/net/issues/55); a fix waits in [net#56](https://github.com/tinygo-org/net/pull/56)).
 structpages registers Go 1.22 patterns, so in a TinyGo build `Mount` routes them itself, through its own copy of Go's
-`ServeMux` (`internal/servemux`): give it any mux, `http.NewServeMux()` included. The `structpages_tables` build does the
+`ServeMux` (`internal/servemux`): give it any mux, `http.NewServeMux()` included. The `structpages_generated` build does the
 same on the standard toolchain, so it differs from a TinyGo build only in the compiler.
 
 Your mux then sees only the mount's prefix (`/`, or `/admin` and `/admin/`), so one difference from the standard build:
@@ -67,7 +67,7 @@ reject as a conflict isn't one. Mount on a mux of its own, or keep your handlers
 
 One thing exists only for TinyGo's gaps, with a comment saying how to remove it:
 
-- **The tables** (`reflect_tables.go`, package `tables`, `structpages-gen`): TinyGo's `reflect` can't list or call
+- **The tables** (`reflect_generated.go`, package `tables`, `structpages-gen`): TinyGo's `reflect` can't list or call
   methods ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and `runtime.FuncForPC` returns nil
   ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)). Once a TinyGo release has both, delete them
   and the build constraints on `reflect_runtime.go`; the suite must pass under `tinygo test` with no generated

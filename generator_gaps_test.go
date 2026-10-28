@@ -10,9 +10,8 @@ import (
 
 // App patterns the generator (tools/gen) might not cover, each run the three
 // ways (reflect, generated, tinygo) by the ordinary suite: whatever reflect
-// does is what the others must do. A pattern the generated code can't do
-// yet is marked with skipInTablesBuild and a "generator gap:" reason, so
-// mise run parity lists it.
+// does is what the others must do, so a pattern the generated code can't do
+// fails here (mise run test).
 
 // A request-arg provider whose type is a named function type.
 type gpUserFunc func(*http.Request) (*raUser, error)

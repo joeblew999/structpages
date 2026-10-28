@@ -84,11 +84,17 @@ func AddMethods(t reflect.Type, ms ...Method) {
 	if ptr {
 		recv = t.Elem()
 	}
+	// The runtime names an instantiation's methods by its generic type, with
+	// "[...]" for its type arguments: genericPage[...].Notes.
+	name := recv.Name()
+	if i := strings.IndexByte(name, '['); i >= 0 {
+		name = name[:i] + "[...]"
+	}
 	prefix := pathToPrefix(recv.PkgPath()) + "."
 	if ptr {
-		prefix += "(*" + recv.Name() + ")."
+		prefix += "(*" + name + ")."
 	} else {
-		prefix += recv.Name() + "."
+		prefix += name + "."
 	}
 	rms := make([]reflect.Method, 0, len(ms))
 	for _, m := range ms {

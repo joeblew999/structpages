@@ -41,7 +41,8 @@ way to find a missing table.
 
 ## What the tables can't do
 
-- **Generic page types.** The generator reports them and leaves them out, so mounting one fails in a TinyGo build.
+- **Generic page types used only inside generic code.** The generator writes code for each instantiation your code
+  uses (`listPage[string]` in a route field), and warns about a generic page type it finds none of.
 - **Function literals as references.** `ID`, `IDTarget`, `RenderTarget.Is` and the gsx `id` and `target` filters
   name declared functions and methods, as method values (`p.Content`) or expressions (`page.Content`), not a
   closure.

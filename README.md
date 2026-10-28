@@ -176,11 +176,11 @@ up they get deleted. [docs/tinygo.md](./docs/tinygo.md) says how to use them, an
 
 | Task | Runs |
 |---|---|
-| `mise run test` / `test:generated` / `test:tinygo` | the library's tests three ways: reflect, generated, tinygo |
+| `mise run test` | the library's tests three ways (reflect, generated, tinygo), with every test each skips |
 | `mise run examples` | every example's tests three ways, as a grid (`examples:record` re-records their checks) |
 | `mise run example:todo:serve:reflect` / `example:todo:serve:generated` / `example:todo:serve:tinygo` | serve an example on http://localhost:8080 each way (tinygo: WebAssembly in workerd; `todo` so far) |
 | `mise run example:todo:test` / `example:todo:bench` | `todo`'s tests three ways / its benchmarks three ways, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md) |
-| `mise run bench:compare` / `bench:examples` | benchmarks three ways: the library's into [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md), each example's into its own `BENCH_GENERATED.md` ([todo's](./examples/todo/BENCH_GENERATED.md)) |
+| `mise run bench` / `bench:examples` | benchmarks three ways: the library's into [BENCH_GENERATED.md](./BENCH_GENERATED.md), each example's into its own `BENCH_GENERATED.md` ([todo's](./examples/todo/BENCH_GENERATED.md)) |
 | `mise run gen:examples` / `lint:examples` | structpages-gen (`tools/gen`) or structpages-lint (`tools/lint`) over every example |
 | `mise run clean:generated` | delete everything generated |
 | `mise run ci:go` | everything CI checks on standard Go |

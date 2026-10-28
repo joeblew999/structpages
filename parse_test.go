@@ -438,6 +438,14 @@ func (p *pageWithInitPanic) Init() {
 	panic("init panic")
 }
 
+// pageWithInitNeedsArg's Init needs an argument nothing provides. It is
+// declared here, not inside the test, so the generated builds have its
+// method too.
+type pageWithInitNeedsArg struct{}
+type initNeeder interface{ NeedThis() }
+
+func (*pageWithInitNeedsArg) Init(initNeeder) error { return nil }
+
 // Test callInitMethod
 func TestParseContext_callInitMethod(t *testing.T) {
 	t.Run("successful init", func(t *testing.T) {
@@ -472,25 +480,13 @@ func TestParseContext_callInitMethod(t *testing.T) {
 	})
 
 	t.Run("callMethod fails", func(t *testing.T) {
-		skipInTablesBuild(t, "builds its method from a function literal, which only reflect can describe")
-		// Create a type with Init method that requires missing arg
-		type pageWithInitNeedsArg struct{}
-		type initNeeder interface{ NeedThis() }
-
 		pc := &parseContext{args: make(argRegistry)}
 		pn := &PageNode{
 			Name:  "test",
 			Value: reflect.ValueOf(&pageWithInitNeedsArg{}),
 		}
-
-		// Create a method that requires an unavailable argument
-		method := reflect.Method{
-			Name: "Init",
-			Type: reflect.TypeOf(func(*pageWithInitNeedsArg, initNeeder) error { return nil }),
-			Func: reflect.ValueOf(func(p *pageWithInitNeedsArg, n initNeeder) error {
-				return nil
-			}),
-		}
+		// Init requires an argument nothing provides
+		method, _ := methodByName(reflect.TypeOf(&pageWithInitNeedsArg{}), "Init")
 
 		err := pc.callInitMethod(pn, &method)
 		if err == nil {

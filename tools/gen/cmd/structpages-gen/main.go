@@ -204,6 +204,7 @@ type gen struct {
 	imports   map[string]string     // path → name
 	names     map[string]bool       // names taken in the file
 	funcTypes map[string]types.Type // *types.Signature, or a named function type
+	generic   []*types.TypeName     // generic page types, whose instantiations get tables
 	warnings  []string
 }
 
@@ -215,9 +216,10 @@ func (g *gen) warn(pos token.Pos, msg string, args ...any) {
 	g.warnings = append(g.warnings, fmt.Sprintf("%s: %s", g.pkg.Fset.Position(pos), fmt.Sprintf(msg, args...)))
 }
 
-// pageType is one page type and its two method sets.
+// pageType is one page type and its two method sets. typ is a named type
+// declared in the package, or an instantiation of a generic one.
 type pageType struct {
-	obj            *types.TypeName
+	typ            *types.Named
 	value, pointer []method
 }
 
@@ -232,6 +234,7 @@ func (g *gen) generate() ([]byte, error) {
 	g.imports = map[string]string{}
 	g.names = map[string]bool{}
 	g.funcTypes = map[string]types.Type{}
+	g.generic = nil
 	for _, name := range g.pkg.Types.Scope().Names() {
 		g.names[name] = true
 	}
@@ -252,6 +255,7 @@ func (g *gen) generate() ([]byte, error) {
 			}
 		}
 	}
+	pages = append(pages, g.instantiations()...)
 	// Request-arg functions used anywhere in the covered files: literals,
 	// method values and functions from other packages, and values of a named
 	// function type, which keep their name: that is the type reflect sees.
@@ -292,11 +296,53 @@ func (g *gen) pageTypes(d *ast.GenDecl) []pageType {
 			continue
 		}
 		if ts.TypeParams != nil {
-			g.warn(ts.Pos(), "generic type %s: tables builds can't list or call its methods", tn.Name())
+			g.generic = append(g.generic, tn) // its instantiations get tables (instantiations)
 			continue
 		}
-		if pt, ok := g.pageType(tn); ok {
+		if pt, ok := g.pageType(tn.Type().(*types.Named), tn.Pos()); ok {
 			pages = append(pages, pt)
+		}
+	}
+	return pages
+}
+
+// instantiations are the page types of the instantiations of g.generic the
+// covered files use, such as genericPage[int] in a route: generated code can
+// name a generic type's methods only with its type arguments. A generic page
+// type used only inside generic code gets none, and a warning.
+func (g *gen) instantiations() []pageType {
+	if len(g.generic) == 0 {
+		return nil
+	}
+	generic := map[*types.TypeName]bool{}
+	for _, tn := range g.generic {
+		generic[tn] = true
+	}
+	// Instances is a map: go through it in source order, so the file
+	// comes out the same every time.
+	ids := make([]*ast.Ident, 0, len(g.pkg.TypesInfo.Instances))
+	for id := range g.pkg.TypesInfo.Instances {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i].Pos() < ids[j].Pos() })
+	var pages []pageType
+	seen, used := map[string]bool{}, map[*types.TypeName]bool{}
+	for _, id := range ids {
+		named, ok := g.pkg.TypesInfo.Instances[id].Type.(*types.Named)
+		if !ok || !g.covered(id.Pos()) || !generic[named.Origin().Obj()] || g.unnameable(named) != "" {
+			continue // a function, outside the files, another type, or inside generic code
+		}
+		used[named.Origin().Obj()] = true
+		if key := types.TypeString(named, (*types.Package).Path); !seen[key] {
+			seen[key] = true
+			if pt, ok := g.pageType(named, named.Origin().Obj().Pos()); ok {
+				pages = append(pages, pt)
+			}
+		}
+	}
+	for _, tn := range g.generic {
+		if !used[tn] {
+			g.warn(tn.Pos(), "generic type %s: no instantiation of it to write tables for", tn.Name())
 		}
 	}
 	return pages
@@ -355,25 +401,25 @@ func (g *gen) isPage(tn *types.TypeName) bool {
 	return false
 }
 
-// pageType lists tn's methods on the value and the pointer type, as
-// reflect would, and adds their function types.
-func (g *gen) pageType(tn *types.TypeName) (pageType, bool) {
-	value, ok := g.methods(tn, false)
+// pageType lists t's methods on the value and the pointer type, as reflect
+// would, and adds their function types; pos is where a warning points.
+func (g *gen) pageType(t *types.Named, pos token.Pos) (pageType, bool) {
+	value, ok := g.methods(t, false, pos)
 	if !ok {
 		return pageType{}, false
 	}
-	pointer, ok := g.methods(tn, true)
+	pointer, ok := g.methods(t, true, pos)
 	if !ok {
 		return pageType{}, false
 	}
-	return pageType{obj: tn, value: value, pointer: pointer}, true
+	return pageType{typ: t, value: value, pointer: pointer}, true
 }
 
-// methods lists the method set of tn, or of *tn, sorted by name. Its own
+// methods lists the method set of t, or of *t, sorted by name. Its own
 // unexported methods are listed too: reflect doesn't list them, but ID and
 // RenderTarget.Is name them when a method expression is passed.
-func (g *gen) methods(tn *types.TypeName, ptr bool) ([]method, bool) {
-	recv := tn.Type()
+func (g *gen) methods(t *types.Named, ptr bool, pos token.Pos) ([]method, bool) {
+	var recv types.Type = t
 	if ptr {
 		recv = types.NewPointer(recv)
 	}
@@ -399,10 +445,10 @@ func (g *gen) methods(tn *types.TypeName, ptr bool) ([]method, bool) {
 		// structpages never calls a promoted method: it is listed by name.
 		if !embedded {
 			if why := g.unnameable(m.sig); why != "" {
-				g.warn(tn.Pos(), "page type %s: method %s: %s", tn.Name(), fn.Name(), why)
+				g.warn(pos, "page type %s: method %s: %s", types.TypeString(t, nil), fn.Name(), why)
 				return nil, false
 			}
-			g.addFuncType(m.sig, tn.Pos())
+			g.addFuncType(m.sig, pos)
 		}
 		list = append(list, m)
 	}
@@ -613,7 +659,7 @@ func (g *gen) file(pages []pageType, funcs []*types.Func) ([]byte, error) {
 	w.tablesName = g.importName(tablesPath, "tables")
 	w.printf("func init() {\n")
 	w.writeFuncTypes()
-	sort.Slice(pages, func(i, j int) bool { return pages[i].obj.Name() < pages[j].obj.Name() })
+	sort.Slice(pages, func(i, j int) bool { return g.typ(pages[i].typ) < g.typ(pages[j].typ) })
 	for _, pt := range pages {
 		w.writeMethods(pt, false)
 		w.writeMethods(pt, true)
@@ -731,9 +777,10 @@ func (w *writer) typeList(t *types.Tuple) string {
 
 // writeMethods writes the method set of pt's type, or of a pointer to it.
 func (w *writer) writeMethods(pt pageType, ptr bool) {
-	list, recv := pt.value, pt.obj.Name()
+	typ := w.g.typ(pt.typ) // page, or genericPage[int]
+	list, recv := pt.value, typ
 	if ptr {
-		list, recv = pt.pointer, "*"+recv
+		list, recv = pt.pointer, "*"+typ
 	}
 	if len(list) == 0 {
 		return
@@ -751,7 +798,7 @@ func (w *writer) writeMethods(pt pageType, ptr bool) {
 		if ptr {
 			expr = "(" + recv + ")." + m.name
 		}
-		w.printf("%s.Method{Name: %q, Expr: %s, Bound: new(%s).%s", w.tablesName, m.name, expr, pt.obj.Name(), m.name)
+		w.printf("%s.Method{Name: %q, Expr: %s, Bound: new(%s).%s", w.tablesName, m.name, expr, typ, m.name)
 		if m.promoted {
 			w.printf(", Promoted: true")
 		}

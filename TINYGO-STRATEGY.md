@@ -17,9 +17,10 @@ Go, generated is a real choice for Go users, not just a way to test TinyGo's cod
 reflection on the standard toolchain, and it must stay correct there. TinyGo has no choice: its `reflect` can't do what
 structpages needs.
 
-"The same" is measured, not assumed. For the library, its one test suite runs all three ways, and `mise run test:tinygo -v` lists
-every test TinyGo still skips, with why. For the examples, every example is built, tested and (see
-the strategy) checked all three ways. Parity is no differences left.
+"The same" is measured, not assumed. For the library, `mise run test` runs its one test suite all three ways and shows,
+for each, how many passed and every test it skipped, with why. For the examples, `mise run examples` does the same for
+each, and every example's check compares its responses all three ways (see the strategy). Parity is no differences
+left.
 
 ## How it works
 
@@ -38,20 +39,25 @@ all three ways, and the generated code still calls through `reflect.Value`.
 
 ## Where it stands
 
-**Library tests** (`mise run test`, `test:generated`, `test:tinygo`):
+**Library tests** (`mise run test`):
 
 | | Passed | Skipped | Failed |
 |---|---|---|---|
-| Go | 771 | 0 | 0 |
-| TinyGo 0.43 | 737 | 14 | 0 |
+| reflect | 796 | 0 | 0 |
+| generated | 796 | 0 | 0 |
+| TinyGo 0.43 | 795 | 0 | 0 |
 
-The 14 skips:
+Nothing is skipped any more. It used to be 14 under TinyGo:
 
-- **11 routing.** TinyGo's `net/http` `ServeMux` routes like Go 1.21: no `GET /path`, no `{id}`, no `{$}`
-  ([tinygo-org/net#55](https://github.com/tinygo-org/net/issues/55)). Every test that serves a real request through a
-  mux skips: handlers, middleware, subpath mounting, `URLFor` from request params.
-- **2 function literals** passed to `ID`/`RenderTarget.Is`. The generator can only name declared functions.
-- **1 generic page type.** The generator can't write code for generic types.
+- **11 routing tests**, since TinyGo's `net/http` `ServeMux` routes like Go 1.21: no `GET /path`, no `{id}`, no `{$}`
+  ([tinygo-org/net#55](https://github.com/tinygo-org/net/issues/55)). They run now: in the generated and TinyGo builds
+  `Mount` routes through `internal/servemux`, Go's own `ServeMux` (see the strategy).
+- **2 function-literal tests**: the generated code can only name declared functions. They now check the error the
+  generated builds give instead, or use a declared method.
+- **1 generic page type**: the generator now writes code for each instantiation the code uses (`genericPage[int]`).
+
+The one test fewer under TinyGo is `internal/servemux`'s `TestSameAsNetHTTP`, built only on the standard toolchain: it
+compares the copy with Go 1.26's own `net/http` mux, which TinyGo doesn't have.
 
 **Examples:**
 
@@ -67,7 +73,7 @@ The 14 skips:
 - **Shape:** every example builds its app inside `main()`, next to `ListenAndServe`, so nothing can reach its
   `http.Handler` without starting a server.
 
-**Benchmarks** (`mise run bench:compare`, results in [BENCH-COMPARE.GENERATED.md](./BENCH-COMPARE.GENERATED.md)), on an
+**Benchmarks** (`mise run bench`, results in [BENCH_GENERATED.md](./BENCH_GENERATED.md)), on an
 Apple M2 Pro:
 
 - **Go, generated vs Go, reflection: about even** (geometric mean 2% faster). Faster where reflection is costly,
@@ -92,7 +98,8 @@ answer is the one the other two must give):
 | route fields of an alias type, or a pointer to a page | same all three ways |
 | `ID` of a method promoted from an embedded struct | same all three ways (an error in each: the method's receiver is no page) |
 | `Props` returning an interface; a component on a pointer receiver | same all three ways |
-| generic page types; function literals passed to `ID`/`RenderTarget.Is` | **gaps, by design**: the generator warns and skips them (3 library tests skip in generated builds) |
+| generic page types | **was a gap**: skipped. Fixed: the generator writes code for each instantiation used (`genericPage[int]`), and warns about one used only inside generic code |
+| function literals passed to `ID`/`RenderTarget.Is` | **can't be**: generated code can name only declared functions. The generated builds return a clear error, which the tests check |
 
 The generator gives no warnings on any of the eight examples.
 
@@ -151,8 +158,8 @@ In order:
 7. **Delete the generated-code support when TinyGo catches up.** Once TinyGo's `reflect` can list and call methods
    ([tinygo#3862](https://github.com/tinygo-org/tinygo/issues/3862)) and name functions
    ([tinygo#4379](https://github.com/tinygo-org/tinygo/issues/4379)), the comment at the top of `reflect_tables.go`
-   lists what to remove, if Go, generated isn't worth keeping on its own by then. `mise run test:tinygo` with no
-   generated files, and nothing skipped, is the check.
+   lists what to remove, if Go, generated isn't worth keeping on its own by then. `mise run test` with no
+   generated files is the check.
 
 ## Risks to keep in mind
 
@@ -167,10 +174,10 @@ In order:
 ## Checking progress
 
 ```bash
-mise run test:tinygo -v           # library: what TinyGo still skips, and why
+mise run test                     # library: its tests three ways, with every skip
 mise run examples                # every example's tests three ways, as a grid
 mise run example:todo:serve:tinygo  # serve todo as WebAssembly in workerd (and :serve:reflect, :serve:generated)
 mise run bench:examples           # every example's pages three ways, into its BENCH_GENERATED.md
-mise run bench:compare            # Go, reflection vs Go, generated vs TinyGo, into BENCH-COMPARE.GENERATED.md
+mise run bench                    # library: its benchmarks three ways, into BENCH_GENERATED.md
 mise run ci:go                    # everything upstream's CI checks on Go
 ```

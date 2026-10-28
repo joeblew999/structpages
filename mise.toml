@@ -15,96 +15,72 @@ workerd = "1.20261019.1"            # Cloudflare's Workers runtime, to serve Tin
 golangci-lint = "2"
 "go:golang.org/x/perf/cmd/benchstat" = "latest"
 
-# ---- The library: its test suite three ways ---------------------------------------------------------------------
-
-[tasks.test]
-description = "The library's tests, reflect, with the race detector (CI's Test job): how many passed, and any it skips."
-quiet = true
-run = "mise run _library reflect"
-
-[tasks."test:generated"]
-description = """The library's tests, generated: generate the code, then test reading it instead of reflect (CI's Tables \
-build): how many passed, and every test it skips, with why."""
-quiet = true
-run = "mise run _library generated"
-
-[tasks."test:tinygo"]
-description = """The library's tests, tinygo, via scripts/tinygo-test.sh (CI's TinyGo job): how many passed, and every \
-test it skips, with why (mostly routing: tinygo-org/net#55)."""
-quiet = true
-run = "mise run _library tinygo"
-
-[tasks._library]
-description = "The library's tests one way: the result per package, the count, every skipped test with why, any failure."
-hide = true
-quiet = true
-shell = "bash -c"
-usage = '''arg "<way>" help="reflect, generated or tinygo"'''
-run = '''
-case "$usage_way" in
-  reflect) out=$(go test -race -count=1 -v ./... 2>&1); code=$? ;;
-  generated)
-    go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./... 2> >(grep -v 'structpages-gen: warning' >&2)
-    out=$(go test -count=1 -tags structpages_tables -v ./... 2>&1); code=$? ;;
-  tinygo) out=$(scripts/tinygo-test.sh -v 2>&1); code=$? ;;
-  *) echo "the way is reflect, generated or tinygo, not $usage_way" >&2; exit 2 ;;
-esac
-grep -E '^(ok|FAIL)[[:space:]]' <<<"$out"
-# A skipped test's reason is its first log line, printed after its "=== RUN".
-skips=$(awk '/^=== RUN/ { cur = $3; next }
-  /^[[:space:]]*--- SKIP: / { print "  " $3 ": " why[$3]; next }
-  cur != "" && !(cur in why) && !/^[[:space:]]*--- / && !/^(PASS|FAIL|ok)/ { l = $0; sub(/^[[:space:]]+/, "", l); why[cur] = l }' <<<"$out")
-passed=$(grep -cE '^[[:space:]]*--- PASS' <<<"$out"); failed=$(grep -cE '^[[:space:]]*--- FAIL' <<<"$out")
-echo; echo "$usage_way: $passed passed, $(grep -c . <<<"$skips") skipped, $failed failed"
-if [ -n "$skips" ]; then echo "skipped:"; echo "$skips"; fi
-if [ $code -ne 0 ]; then echo; grep -A12 -E '^[[:space:]]*--- FAIL' <<<"$out" | head -60; fi
-exit $code
-'''
-
-# ---- The examples: tested three ways, and served three ways -----------------------------------------------------
+# ---- Tests, three ways: the library (the root folder) and each example, the same way ------------------------------
 #
 # An example's check_test.go crawls its app (tools/check) and compares every response with
 # testdata/check.generated.txt, recorded from reflect. lint-misuse is a linter fixture: its tests check the linter.
 
+[tasks.test]
+description = """The library's tests three ways (reflect with the race detector, generated, tinygo): a line with how \
+many passed each way, then every test skipped, with why, and the first lines of any failure."""
+quiet = true
+run = "mise run _test ."
+
 [tasks.examples]
-description = """Every example's tests three ways (reflect, generated, tinygo), one line each, then the first \
-difference of each failure. "no tests" marks an example with none yet. One example: example:<name>:test."""
+description = """Every example's tests three ways, as test does for the library: a line each, and "no tests" for an \
+example with none yet. One example: example:<name>:test."""
 quiet = true
 run = '''
 fail=0
 for d in examples/*/; do
-  name=$(basename "$d")
-  [ "$name" = lint-misuse ] && continue
-  mise run _test "$name" || fail=1
+  [ "$(basename "$d")" = lint-misuse ] && continue
+  mise run _test "${d%/}" || fail=1
 done
 exit $fail
 '''
 
 [tasks._test]
-description = "examples/<name>'s tests three ways, on one line, then the first difference of each failure."
+description = "The tests of <dir> (. for the library, or examples/<name>), all three ways or one."
 hide = true
 quiet = true
 shell = "bash -c"
-usage = '''arg "<name>" help="the example's folder under examples/"'''
+usage = '''
+arg "<dir>" help=". for the library, or examples/<name>"
+arg "[way]" help="reflect, generated or tinygo: all three when left out"
+'''
 run = '''
-d="examples/$usage_name"; fail=0; report=""; row=""
+d=$usage_dir; name=$([ "$d" = . ] && echo library || basename "$d"); fail=0; row=""; report=""
+if [ "$d" != . ] && [ -z "$(find "$d" -name '*_test.go' -print -quit)" ]; then printf '%-16s no tests\n' "$name"; exit 0; fi
 gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
-if [ -z "$(find "$d" -name '*_test.go' -print -quit)" ]; then printf '%-20s no tests\n' "$usage_name"; exit 0; fi
 if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
-for way in reflect generated tinygo; do
+for way in ${usage_way:-reflect generated tinygo}; do
   case $way in
-    reflect) cmd=(go test -count=1 ./...) ;;
-    generated) gen; cmd=(go test -count=1 -tags structpages_tables ./...) ;;
-    tinygo) gen -tags tinygo; cmd=(tinygo test ./...) ;;
+    reflect) cmd=(go test -race -count=1 -v ./...) ;;
+    generated) gen; cmd=(go test -count=1 -tags structpages_tables -v ./...) ;;
+    tinygo) gen -tags tinygo; cmd=(tinygo test -v ./...) ;;
+    *) echo "the way is reflect, generated or tinygo, not $way" >&2; exit 2 ;;
   esac
-  if out=$(cd "$d" && "${cmd[@]}" 2>&1); then
-    row+=$(printf '%-18s' "$way: pass")
-  else
-    row+=$(printf '%-18s' "$way: FAIL"); fail=1
-    report+=$'\n'"== $usage_name, $way:"$'\n'"$(grep -vE '^(FAIL|ok|\?)' <<<"$out" | head -14)"$'\n'
-  fi
+  out=$(cd "$d" && "${cmd[@]}" 2>&1); code=$?
+  # A skipped test's reason is its first log line, printed after its "=== RUN" (Go puts file:line first).
+  skips=$(awk '/^=== RUN/ { cur = $3; next }
+    /^[[:space:]]*--- SKIP: / { print "  " $3 ": " why[$3]; next }
+    cur != "" && !(cur in why) && !/^[[:space:]]*--- / && !/^(PASS|FAIL|ok)/ { l = $0; sub(/^[[:space:]]+/, "", l); sub(/^[^ ]+\.go:[0-9]+: /, "", l); why[cur] = l }' <<<"$out")
+  passed=$(grep -cE '^[[:space:]]*--- PASS' <<<"$out"); failed=$(grep -cE '^[[:space:]]*--- FAIL' <<<"$out"); n=$(grep -c . <<<"$skips")
+  cell="$way: $([ $code = 0 ] && echo pass || echo FAIL), $passed passed"
+  [ "$failed" -gt 0 ] && cell+=", $failed failed"
+  [ "$n" -gt 0 ] && cell+=", $n skipped"
+  row+=$(printf '%-42s' "$cell")
+  printf -v "skips_$way" '%s' "$skips"
+  if [ $code -ne 0 ]; then fail=1; report+=$'\n'"== $name, $way:"$'\n'"$(grep -A12 -E '^[[:space:]]*--- FAIL|^panic' <<<"$out" | head -40)"$'\n'; fi
 done
-printf '%-20s %s\n' "$usage_name" "$row"
+printf '%-16s %s\n' "$name" "$row"
+# The same skips in generated and tinygo are listed once.
+if [ -n "${skips_generated:-}" ] && [ "${skips_generated:-}" = "${skips_tinygo:-}" ]; then
+  echo "  skipped in generated and tinygo:"; echo "$skips_generated"; skips_generated=""; skips_tinygo=""
+fi
+for way in reflect generated tinygo; do
+  v="skips_$way"; if [ -n "${!v:-}" ]; then echo "  skipped in $way:"; echo "${!v}"; fi
+done
 if [ -n "$report" ]; then echo "$report"; fi
 exit $fail
 '''
@@ -260,12 +236,12 @@ run = "mise run _example todo tinygo"
 [tasks."example:todo:test"]
 description = "examples/todo's tests three ways: reflect, generated, tinygo."
 quiet = true
-run = "mise run _test todo"
+run = "mise run _test examples/todo"
 
 [tasks."example:todo:bench"]
 description = "examples/todo's benchmarks three ways, into examples/todo/BENCH_GENERATED.md."
 quiet = true
-run = "mise run _bench todo"
+run = "mise run _bench examples/todo"
 
 [tasks."example:url-validation:serve:reflect"]
 description = "Serve examples/url-validation on :8080, reflect."
@@ -318,78 +294,43 @@ run = [
   "find examples -type d -name worker.generated -prune -print -exec rm -rf {} + | sed 's/^/deleted /'",
 ]
 
-# ---- Benchmarks, three ways ---------------------------------------------------------------------------------------
+# ---- Benchmarks, three ways: the library (the root folder) and each example, the same way -------------------------
 
 [tasks.bench]
-description = "The library's benchmarks, reflect (PERFORMANCE.md)."
-run = "go test -run NoTest -bench . -benchmem ."
-
-[tasks."bench:compare"]
 description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
-BENCH-COMPARE.GENERATED.md."""
-shell = "bash -c"
-run = '''
-set -euo pipefail
-flags=(-run NoTest -bench . -benchmem -count 6 -benchtime 200ms)
-quiet() { "$@" 2> >(grep -v 'structpages-gen: warning' >&2); }
-echo "running reflect..."; reflect=$(go test "${flags[@]}" .)
-echo "running generated..."; quiet go run -C tools/gen ./cmd/structpages-gen -C {{config_root}} -test ./...
-generated=$(go test -tags structpages_tables "${flags[@]}" .)
-# TinyGo prints no -N CPU suffix or goos/pkg/cpu lines, and 0 for every allocs/op, so those are left out.
-echo "running tinygo..."; tinygo=$(quiet scripts/tinygo-test.sh "${flags[@]}" | sed -E 's/[[:space:]]+0 allocs\/op//')
-result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$reflect") generated=<(echo "$generated") tinygo=<(echo "$tinygo"))
-echo "$result"
-# Before the file is written: writing it would count as an uncommitted change.
-stamp="Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . ':!BENCH-COMPARE.GENERATED.md' || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)."
-cat > BENCH-COMPARE.GENERATED.md <<EOF
-<!-- Generated by \`mise run bench:compare\`. Do not edit: run it again. -->
-
-# Benchmark comparison: the library
-
-- reflect: standard Go, structpages reading methods through reflect
-- generated: standard Go, reading generated code instead (-tags structpages_tables)
-- tinygo: TinyGo, which reads the generated code too; it reports no allocs/op
-
-$stamp
-$(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$reflect" | sed -n 's/^cpu: //p').
-Every benchmark, 6 runs of 200ms each.
-
-\`\`\`
-$result
-\`\`\`
-EOF
-echo "wrote BENCH-COMPARE.GENERATED.md"
-'''
+BENCH_GENERATED.md."""
+quiet = true
+run = "mise run _bench ."
 
 [tasks."bench:examples"]
-description = """Every example's BenchmarkCheck (its recorded GETs) three ways, in-process and as served, into the \
-example's own BENCH_GENERATED.md. One example: example:<name>:bench."""
+description = """Every example's benchmarks three ways, in-process and as served, each into its own BENCH_GENERATED.md, \
+as bench does for the library. One example: example:<name>:bench."""
 quiet = true
 run = '''
 for d in examples/*/; do
-  grep -qs 'func BenchmarkCheck' "$d/check_test.go" || continue
-  mise run _bench "$(basename "$d")" || exit 1
+  grep -qs '^func Benchmark' "$d"*_test.go || continue
+  mise run _bench "${d%/}" || exit 1
 done
 '''
 
 [tasks._bench]
-description = """examples/<name>'s BenchmarkCheck three ways, in-process and as served (tinygo: WebAssembly in \
-workerd), compared with benchstat, into its BENCH_GENERATED.md."""
+description = """The benchmarks of <dir> (. for the library, or examples/<name>) three ways, compared with benchstat, into \
+<dir>/BENCH_GENERATED.md; an example serving through workers is timed as served too (tinygo: WebAssembly in workerd)."""
 hide = true
 quiet = true
 shell = "bash -c"
-usage = '''arg "<name>" help="the example's folder under examples/"'''
+usage = '''arg "<dir>" help=". for the library, or examples/<name>"'''
 run = '''
 set -euo pipefail
-d="examples/$usage_name/"; name=$usage_name
-if ! grep -qs 'func BenchmarkCheck' "$d/check_test.go"; then
-  echo "examples/$name has no BenchmarkCheck yet: add one to check_test.go, like examples/todo's" >&2; exit 2
+d=$usage_dir; name=$([ "$d" = . ] && echo library || basename "$d")
+if ! grep -qs '^func Benchmark' "$d"/*_test.go; then
+  echo "$d has no benchmarks yet: add a BenchmarkCheck to its check_test.go, like examples/todo's" >&2; exit 2
 fi
-flags=(-run NoTest -bench BenchmarkCheck -benchmem -count 6 -benchtime 200ms)
+flags=(-run NoTest -bench . -benchmem -count 6 -benchtime 200ms)
 gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
 if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
 
-# In-process: each way's own test binary calls the handler directly.
+# In-process: each way's own test binary calls the code directly.
 echo "== $name, in-process: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
 echo "== $name, in-process: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_tables "${flags[@]}" .)
 echo "== $name, in-process: tinygo..."; gen -tags tinygo
@@ -398,37 +339,38 @@ tinygo=$(cd "$d" && tinygo test "${flags[@]}" . | sed -E 's/[[:space:]]+0 allocs
 result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$reflect") generated=<(echo "$generated") tinygo=<(echo "$tinygo"))
 echo "$result"
 
-# As served: each way started as its example:<name>:serve:<way> task serves it, on :8080, and timed over local HTTP by
-# one standard Go client (CHECK_URL), so all three pay the same network cost. Times only: allocations would be the
-# client's.
+# As served, for an example serving through workers: each way started as its example:<name>:serve:<way> task serves
+# it, on :8080, and timed over local HTTP by one standard Go client (CHECK_URL), so all three pay the same network
+# cost. Times only: allocations would be the client's.
 served() {
   if lsof -ti tcp:8080 >/dev/null; then echo "port 8080 is in use: stop what is on it first" >&2; exit 1; fi
   mise run _example "$name" "$1" >/dev/null 2>&1 &
   curl -s -o /dev/null --retry-connrefused --retry 300 --retry-delay 1 --max-time 400 http://localhost:8080/ ||
-    { echo "examples/$name, $1: the server never answered" >&2; exit 1; }
-  (cd "$d" && CHECK_URL=http://localhost:8080 go test -run NoTest -bench BenchmarkCheck -count 6 -benchtime 200ms .)
+    { echo "$d, $1: the server never answered" >&2; exit 1; }
+  (cd "$d" && CHECK_URL=http://localhost:8080 go test -run NoTest -bench . -count 6 -benchtime 200ms .)
   lsof -ti tcp:8080 | xargs kill 2>/dev/null || true
   wait 2>/dev/null || true
   while lsof -ti tcp:8080 >/dev/null; do sleep 0.2; done
 }
-served_result="(not served under TinyGo: examples/$name doesn't serve through the workers module yet)"
-echo "== $name, served: reflect..."; s_reflect=$(served reflect)
-echo "== $name, served: generated..."; s_generated=$(served generated)
-if grep -q 'structpages/workers ' "$d/go.mod"; then
+if [ "$d" = . ]; then
+  served_result="(the library is no app: nothing to serve)"
+elif grep -q 'structpages/workers ' "$d/go.mod"; then
+  echo "== $name, served: reflect..."; s_reflect=$(served reflect)
+  echo "== $name, served: generated..."; s_generated=$(served generated)
   echo "== $name, served: tinygo, in workerd..."; s_tinygo=$(served tinygo)
-  wasm="$(du -k "$d/worker.generated/app.wasm" | cut -f1) KB"
+  wasm="$(du -k "$d/worker.generated/app.wasm" | cut -f1) KB of"
   served_result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$s_reflect") generated=<(echo "$s_generated") tinygo=<(echo "$s_tinygo"))
+  echo "$served_result"
+else
+  served_result="(not served: $d doesn't serve through the workers module yet)"
 fi
-echo "$served_result"
 
 # Before the file is written: writing it would count as an uncommitted change.
-stamp="Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . ":!${d}BENCH_GENERATED.md" || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)."
-cat > "$d/BENCH_GENERATED.md" <<EOF
-<!-- Generated by \`mise run bench:examples\` or \`mise run example:$name:bench\`. Do not edit: run it again. -->
+stamp="Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . ":!$d/BENCH_GENERATED.md" || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)."
+cat > "$d/BENCH_GENERATED.md" <<EOT
+<!-- Generated by \`mise run $([ "$d" = . ] && echo bench || echo "example:$name:bench")\`. Do not edit: run it again. -->
 
 # $name: benchmarks, three ways
-
-BenchmarkCheck (check_test.go) times each GET that $name's check recorded (testdata/check.generated.txt):
 
 - reflect: standard Go, structpages reading methods through reflect
 - generated: standard Go, reading generated code instead (-tags structpages_tables)
@@ -440,7 +382,7 @@ $(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$re
 
 ## In-process
 
-Each way's test binary calls the app's handler directly (TinyGo's natively, and it reports no allocs/op).
+Each way's test binary calls the code directly (TinyGo's natively, and it reports no allocs/op).
 
 \`\`\`
 $result
@@ -448,21 +390,23 @@ $result
 
 ## As served
 
-Each way served on :8080 as its example:$name:serve:<way> task serves it (tinygo: ${wasm:-no} WebAssembly in workerd, what
-Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
+Each way served on :8080 as its example:$name:serve:<way> task serves it (tinygo: ${wasm:-no} WebAssembly in workerd,
+what Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
 
 \`\`\`
 $served_result
 \`\`\`
-EOF
-echo "wrote ${d}BENCH_GENERATED.md"
+EOT
+echo "wrote $d/BENCH_GENERATED.md"
 '''
 
 # ---- What upstream's CI checks, on standard Go --------------------------------------------------------------------
 
 [tasks."ci:go"]
-description = "Everything CI checks on standard Go: test, fmt, vet, lint, test:examples."
-depends = ["test", "fmt", "vet", "lint", "test:examples"]
+description = "Everything CI checks on standard Go: the library's tests (reflect), fmt, vet, lint, test:examples."
+depends = ["fmt", "vet", "lint", "test:examples"]
+quiet = true
+run = "mise run _test . reflect"
 
 [tasks.fmt]
 description = "Fail if any file needs gofmt (CI's Format job)."

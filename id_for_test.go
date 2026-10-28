@@ -687,6 +687,16 @@ func (idForUnregisteredPage) SomeMethod() component {
 	return testComponent{"unregistered"}
 }
 
+// noReceiverError is what IDTarget's error for a function literal says:
+// reflect sees a function without a receiver, and generated code has no name
+// for a function literal at all.
+func noReceiverError() string {
+	if tablesBuild {
+		return "cannot get function info"
+	}
+	return "failed to extract receiver type"
+}
+
 // Test IDFor error cases
 func TestIDFor_ErrorCases(t *testing.T) {
 	t.Run("context without parseContext", func(t *testing.T) {
@@ -743,15 +753,14 @@ func TestIDFor_ErrorCases(t *testing.T) {
 
 		ctx := pcCtx.WithValue(context.Background(), sp.pc)
 
-		skipInTablesBuild(t, "the tables name declared functions and methods, not function literals")
 		// Call IDFor with function that has no receiver
 		noReceiverFunc := func() component { return testComponent{"test"} }
 		_, err = IDTarget(ctx, noReceiverFunc)
 		if err == nil {
 			t.Error("Expected error for function with no receiver")
 		}
-		if err != nil && !strings.Contains(err.Error(), "failed to extract receiver type") {
-			t.Errorf("Expected 'failed to extract receiver type' error, got: %v", err)
+		if want := noReceiverError(); err != nil && !strings.Contains(err.Error(), want) {
+			t.Errorf("Expected %q error, got: %v", want, err)
 		}
 	})
 

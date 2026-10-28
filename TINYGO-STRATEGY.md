@@ -56,7 +56,7 @@ The 14 skips:
 **Examples:**
 
 - **Build:** all eight build all three ways. TinyGo's WebAssembly (`-target wasm`) is 742 KB to 1.4 MB per example
-  (measured 2026-10-28; `mise run example:todo:tinygo` prints todo's, 1.4 MB, when it serves it).
+  (measured 2026-10-28; `mise run example:todo:serve:tinygo` prints todo's, 1.4 MB, when it serves it).
 - **Tests:** six of the eight have none (blog, html-template, htmx, htmx-render-target, simple, todo), so their test
   runs prove only that they compile. `url-validation`'s tests pass on Go, reflection and generated, and **fail under
   TinyGo**: `/foundations/` serves the home page, because TinyGo's mux can't match `/{$}` or `/{slug}`. That is the
@@ -168,7 +168,7 @@ In order:
 ```bash
 mise run test:tinygo -v           # library: what TinyGo still skips, and why
 mise run examples                # every example's tests three ways, as a grid
-mise run example:todo:tinygo      # serve todo as WebAssembly in workerd (and :generated, and plain)
+mise run example:todo:serve:tinygo  # serve todo as WebAssembly in workerd (and :serve:reflect, :serve:generated)
 mise run bench:examples           # every example's pages three ways, into its BENCH.GENERATED.md
 mise run bench:compare            # Go, reflection vs Go, generated vs TinyGo, into BENCH-COMPARE.GENERATED.md
 mise run ci:go                    # everything upstream's CI checks on Go

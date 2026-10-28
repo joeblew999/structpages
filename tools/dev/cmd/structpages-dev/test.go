@@ -9,9 +9,17 @@ import (
 	"strings"
 )
 
-// test is the test command: a folder built and tested each way, on a line,
-// then what was skipped and what failed. It returns the exit code.
+// test is the test command. With a way, it is one step: the current folder's
+// tests run that way, then a line with how many passed, what was skipped
+// and why, and what failed. With a folder, it builds and tests the folder
+// each way, on one line. It returns the exit code.
 func test(args []string) int {
+	if len(args) == 1 && slices.Contains(ways, args[0]) {
+		if !testFolder(newFolder("."), args) {
+			return 1
+		}
+		return 0
+	}
 	set := flag.NewFlagSet("test", flag.ExitOnError)
 	waysFlag := set.String("ways", strings.Join(ways, ","), "the ways to build and test, in order")
 	_ = set.Parse(args)

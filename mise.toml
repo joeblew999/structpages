@@ -26,11 +26,23 @@ workerd = "1.20261019.1"            # Cloudflare's Workers runtime, to serve Tin
 golangci-lint = "2"
 "go:golang.org/x/perf/cmd/benchstat" = "latest"
 
+[env]
+# structpages-dev, which tools:dev builds, is on the path for every task.
+_.path = ["{{config_root}}/build/bin"]
+
 [vars]
 # structpages-dev from this repository, working in its root; the folder and what to do follow.
 dev = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}}"
 # structpages-static generate from this repository (step 2); -C, the folder, follows.
 structpages_static = "go run -C tools/static ./cmd/structpages-static generate"
+
+# ---- This repository's dev tool -----------------------------------------------------------------------------------
+
+[tasks."tools:dev"]
+description = "Build structpages-dev (tools/dev) into build/bin, on the path for every task; again only when its code changes."
+sources = ["tools/dev/**/*.go", "tools/dev/go.mod"]
+outputs = ["build/bin/structpages-dev"]
+run = "go build -C tools/dev -o {{config_root}}/build/bin/structpages-dev ./cmd/structpages-dev"
 
 # ---- Generate: each folder's generated files, in THE ORDER above ---------------------------------------------------
 
@@ -141,11 +153,27 @@ run = "go test -update"
 description = "todo: all three generate tasks."
 depends = ["example:todo:generate:e2e"]
 
+[tasks."example:todo:test:dynamic"]
+description = "todo: test it, dynamic."
+depends = ["example:todo:generate", "tools:dev"]
+dir = "examples/todo"
+run = "structpages-dev test dynamic"
+
+[tasks."example:todo:test:static"]
+description = "todo: test it, static."
+depends = ["example:todo:generate", "tools:dev"]
+dir = "examples/todo"
+run = "structpages-dev test static"
+
+[tasks."example:todo:test:static-worker"]
+description = "todo: test it, static-worker."
+depends = ["example:todo:generate", "tools:dev"]
+dir = "examples/todo"
+run = "structpages-dev test static-worker"
+
 [tasks."example:todo:test"]
-description = "examples/todo, step 4: build and test it three ways (dynamic, static, static-worker), a line each."
-depends = ["example:todo:generate"]
-quiet = true
-run = "go run -C tools/dev ./cmd/structpages-dev -C {{config_root}} test examples/todo"
+description = "todo: test it all three ways."
+depends = ["example:todo:test:dynamic", "example:todo:test:static", "example:todo:test:static-worker"]
 
 [tasks."example:todo:bench"]
 description = "examples/todo, step 4: its benchmarks three ways, in-process and as served, into examples/todo/BENCH_GENERATED.md."

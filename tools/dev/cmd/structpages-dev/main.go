@@ -6,6 +6,7 @@
 // structpages-static generate writes instead) and static-worker (a Cloudflare Worker,
 // TinyGo WebAssembly, which always reads that code):
 //
+//	structpages-dev test dynamic|static|static-worker
 //	structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder
 //	structpages-dev [-C dir] bench folder
 //	structpages-dev [-C dir] serve folder dynamic|static|static-worker
@@ -50,7 +51,8 @@ var root string
 func main() {
 	dir := flag.String("C", "", "change to `dir` before anything else, as go -C does")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder\n"+
+		fmt.Fprintln(os.Stderr, "usage: structpages-dev test dynamic|static|static-worker\n"+
+			"       structpages-dev [-C dir] test [-ways dynamic,static,static-worker] folder\n"+
 			"       structpages-dev [-C dir] bench folder\n"+
 			"       structpages-dev [-C dir] serve folder dynamic|static|static-worker")
 		flag.PrintDefaults()
@@ -107,7 +109,7 @@ func newFolder(dir string) folder {
 		fail(fmt.Errorf("%s: no go.mod: a folder is the library (.) or an app's module", dir))
 	}
 	name := filepath.Base(abs)
-	if dir == "." {
+	if abs == root {
 		name = "library"
 	}
 	return folder{dir: dir, abs: abs, name: name}

@@ -45,6 +45,9 @@ examples/todo/todo
 examples/htmx-render-target/htmx-render-target-example
 examples/lint-misuse/lint-misuse
 
+# What mise builds: structpages-dev, in build/bin, on the path for its tasks
+/build/
+
 # Code structpages-static generate writes (named *.generated*.go) for this repo's own
 # tests (mise run generate; CI's Static build). The examples' is
 # committed instead, as their gsx output is.

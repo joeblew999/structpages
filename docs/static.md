@@ -16,9 +16,10 @@ runs three ways:
 | static | standard Go, `-tags structpages_static` | generated code |
 | static-worker | TinyGo, a Cloudflare Worker ([TinyGo](./tinygo.md)) | generated code: TinyGo's `reflect` can't list or call methods or name a function |
 
-Your pages don't change. On the standard toolchain the static build is a choice: no method reflection, and on a
-real page it is faster (in this repo, `examples/todo`'s page renders about a fifth faster than with `reflect`). Under
-TinyGo it is the only way.
+Your pages don't change. On the standard toolchain the static build is a choice: no method reflection, at about
+the same speed (in this repo, `examples/todo`'s page renders in the same time both ways, now that `URLFor` and `ID`
+work a page's route and a method's id out once, which was where `reflect` cost the most). Under TinyGo it is the only
+way.
 
 ## Generate the code
 

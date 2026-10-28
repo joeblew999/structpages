@@ -6,8 +6,8 @@
 - static: standard Go, methods known at compile time from generated code (-tags structpages_static)
 - static-worker: a Cloudflare Worker: TinyGo WebAssembly, static too, built with every one of structpages-workers' defaults
 
-Commit 06ac12c + uncommitted changes, 2026-10-28T16:05Z.
-go1.27.3 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
+Commit 015f1f2 + uncommitted changes, 2026-10-28T17:22Z.
+go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
 
 ## In short
 
@@ -19,14 +19,14 @@ workerd's own work is Cloudflare's: a Worker is billed for its own CPU.
 
 | page | CPU per request | dynamic | static | static-worker |
 |---|---|---|---|---|
-| `GET /` | the build, served | 39.2 µs | 40.0 µs | 78.8 µs |
-|  | its server alone, no app | 35.1 µs | 35.1 µs | 56.0 µs |
-|  | **the way's own** | 4.1 µs | 4.9 µs | 22.8 µs |
+| `GET /` | the build, served | 39.3 µs | 39.7 µs | 78.2 µs |
+|  | its server alone, no app | 35.6 µs | 35.6 µs | 56.9 µs |
+|  | **the way's own** | 3.6 µs | 4.1 µs | 21.3 µs |
 
 ## On Cloudflare
 
 The static-worker build deployed at https://structpages-todo.gedw99.workers.dev (example:todo:deploy), timed 2026-10-28T16:05Z: each recorded page
-sent 50 times to warm its isolates, then 200 times, 1 at a time, 200 requests in all (example:todo:bench:cloudflare).
+sent 50 times to warm its isolates, then 200 times, one at a time, 200 in all (example:todo:bench:cloudflare).
 The CPU and wall time are what Cloudflare logged for each request, in whole milliseconds: what it bills.
 wrangler tail, which reads them, logs a sample of the requests, so the table counts those it logged. The
 time at the client is mostly the network between this machine and Cloudflare.
@@ -49,11 +49,11 @@ server process's CPU before and after, divided by the requests.
 ```
             │   dynamic   │            static            │            static-worker             │
             │   sec/op    │   sec/op     vs base         │    sec/op     vs base                │
-Served/GET_   52.95µ ± 5%   53.41µ ± 3%  ~ (p=0.240 n=6)   111.87µ ± 5%  +111.27% (p=0.002 n=6)
+Served/GET_   53.05µ ± 1%   53.16µ ± 1%  ~ (p=0.394 n=6)   110.94µ ± 4%  +109.13% (p=0.002 n=6)
 
-            │   dynamic   │            static            │            static-worker             │
-            │ cpu-sec/op  │ cpu-sec/op   vs base         │  cpu-sec/op   vs base                │
-Served/GET_   39.18µ ± 8%   39.98µ ± 5%  ~ (p=0.394 n=6)   78.84µ ± 26%  +101.21% (p=0.002 n=6)
+            │   dynamic   │            static            │            static-worker            │
+            │ cpu-sec/op  │ cpu-sec/op   vs base         │  cpu-sec/op   vs base               │
+Served/GET_   39.25µ ± 1%   39.70µ ± 2%  ~ (p=0.093 n=6)   78.19µ ± 26%  +99.20% (p=0.002 n=6)
 ```
 
 ## The servers alone
@@ -67,11 +67,11 @@ served and timed as above:
 ```
             │  floor-go   │           floor-workerd            │
             │   sec/op    │   sec/op     vs base               │
-Served/GET_   49.96µ ± 2%   92.63µ ± 2%  +85.40% (p=0.002 n=6)
+Served/GET_   50.14µ ± 2%   92.71µ ± 2%  +84.91% (p=0.002 n=6)
 
             │  floor-go   │           floor-workerd            │
             │ cpu-sec/op  │ cpu-sec/op   vs base               │
-Served/GET_   35.06µ ± 4%   56.05µ ± 4%  +59.85% (p=0.002 n=6)
+Served/GET_   35.62µ ± 4%   56.93µ ± 3%  +59.85% (p=0.002 n=6)
 ```
 
 ## In-process
@@ -80,13 +80,13 @@ Each way's test binary calls the code directly, 6 runs of 200ms each (TinyGo's n
 as WebAssembly, with its native collector; it reports no allocs/op).
 
 ```
-         │   dynamic   │            static            │            static-worker             │
-         │   sec/op    │   sec/op     vs base         │    sec/op     vs base                │
-E2E/GET_   4.679µ ± 2%   4.743µ ± 7%  ~ (p=0.071 n=6)   15.210µ ± 0%  +225.06% (p=0.002 n=6)
+         │   dynamic    │            static            │            static-worker             │
+         │    sec/op    │   sec/op     vs base         │    sec/op     vs base                │
+E2E/GET_   4.678µ ± 10%   4.768µ ± 1%  ~ (p=0.180 n=6)   16.757µ ± 7%  +258.25% (p=0.002 n=6)
 
          │   dynamic    │               static               │            static-worker            │
          │     B/op     │     B/op      vs base              │     B/op      vs base               │
-E2E/GET_   11.70Ki ± 0%   11.72Ki ± 0%  +0.20% (p=0.002 n=6)   17.33Ki ± 0%  +48.10% (p=0.002 n=6)
+E2E/GET_   11.70Ki ± 0%   11.72Ki ± 0%  +0.19% (p=0.002 n=6)   17.02Ki ± 0%  +45.43% (p=0.002 n=6)
 
          │  dynamic   │              static              │
          │ allocs/op  │ allocs/op   vs base              │
@@ -99,14 +99,14 @@ Each way's build started 6 times: the time from starting it to its first answer 
 workerd's own start included.
 
 ```
-      │   dynamic   │            static            │            static-worker             │
-      │   sec/op    │   sec/op     vs base         │    sec/op     vs base                │
-Start   7.427m ± 8%   7.392m ± 7%  ~ (p=0.589 n=6)   40.162m ± 3%  +440.76% (p=0.002 n=6)
+      │   dynamic   │              static               │            static-worker             │
+      │   sec/op    │   sec/op     vs base              │    sec/op     vs base                │
+Start   7.361m ± 4%   7.217m ± 2%  -1.96% (p=0.004 n=6)   39.883m ± 3%  +441.79% (p=0.002 n=6)
 ```
 
 ## The Worker
 
-static-worker's app.wasm is 1643 KB, 574 KB gzipped: Cloudflare allows 3 MB gzipped on Workers Free,
+static-worker's app.wasm is 1640 KB, 574 KB gzipped: Cloudflare allows 3 MB gzipped on Workers Free,
 10 MB on Workers Paid. structpages-workers built it with its defaults: heap=8MB tinygo=../../build/tinygo glue=structpages warm=/ opt=2 gc=leaking stack=64kb.
 
 The Worker built with one of structpages-workers' defaults turned off each, and with none, to show what
@@ -121,15 +121,15 @@ each saves, served and started as above, compared with static-worker, which has 
 - static-worker-plain: none of them, the Worker as TinyGo and workers-go ship (-tinygoroot installed -heap 0 -glue workers-go -opt z -gc precise)
 
 ```
-            │ static-worker │       static-worker-no-patch       │        static-worker-no-heap        │        static-worker-no-glue         │       static-worker-no-opt        │      static-worker-no-leaking      │          static-worker-plain           │
-            │    sec/op     │    sec/op     vs base              │   sec/op     vs base                │    sec/op     vs base                │   sec/op     vs base              │   sec/op     vs base               │    sec/op      vs base                 │
-Served/GET_     111.9µ ± 5%   119.8µ ± 13%  +7.12% (p=0.002 n=6)   336.0µ ± 7%  +200.29% (p=0.002 n=6)   695.4µ ± 34%  +521.56% (p=0.002 n=6)   116.7µ ± 2%  +4.29% (p=0.015 n=6)   136.3µ ± 5%  +21.84% (p=0.002 n=6)   2652.6µ ± 75%  +2271.04% (p=0.002 n=6)
+            │ static-worker │      static-worker-no-patch       │        static-worker-no-heap        │        static-worker-no-glue         │       static-worker-no-opt        │      static-worker-no-leaking      │          static-worker-plain           │
+            │    sec/op     │   sec/op     vs base              │   sec/op     vs base                │    sec/op     vs base                │   sec/op     vs base              │   sec/op     vs base               │    sec/op      vs base                 │
+Served/GET_     110.9µ ± 4%   119.9µ ± 1%  +8.05% (p=0.002 n=6)   332.7µ ± 7%  +199.93% (p=0.002 n=6)   676.1µ ± 33%  +509.45% (p=0.002 n=6)   114.7µ ± 4%  +3.36% (p=0.015 n=6)   133.6µ ± 7%  +20.39% (p=0.002 n=6)   2660.9µ ± 76%  +2298.51% (p=0.002 n=6)
 
-            │ static-worker │       static-worker-no-patch        │         static-worker-no-heap         │         static-worker-no-glue         │     static-worker-no-opt      │       static-worker-no-leaking       │           static-worker-plain           │
-            │  cpu-sec/op   │  cpu-sec/op   vs base               │  cpu-sec/op    vs base                │  cpu-sec/op    vs base                │  cpu-sec/op   vs base         │  cpu-sec/op    vs base               │   cpu-sec/op    vs base                 │
-Served/GET_    78.84µ ± 26%   89.62µ ± 44%  +13.68% (p=0.041 n=6)   293.80µ ± 29%  +272.66% (p=0.002 n=6)   632.10µ ± 27%  +701.77% (p=0.002 n=6)   85.03µ ± 11%  ~ (p=0.310 n=6)   102.44µ ± 31%  +29.94% (p=0.004 n=6)   2620.78µ ± 73%  +3224.26% (p=0.002 n=6)
+            │ static-worker │       static-worker-no-patch        │         static-worker-no-heap         │         static-worker-no-glue         │     static-worker-no-opt      │      static-worker-no-leaking       │           static-worker-plain           │
+            │  cpu-sec/op   │  cpu-sec/op   vs base               │  cpu-sec/op    vs base                │  cpu-sec/op    vs base                │  cpu-sec/op   vs base         │  cpu-sec/op   vs base               │   cpu-sec/op    vs base                 │
+Served/GET_    78.19µ ± 26%   88.44µ ± 44%  +13.11% (p=0.041 n=6)   292.68µ ± 28%  +274.30% (p=0.002 n=6)   607.41µ ± 24%  +676.81% (p=0.002 n=6)   83.09µ ± 13%  ~ (p=0.240 n=6)   99.11µ ± 31%  +26.75% (p=0.015 n=6)   2599.93µ ± 76%  +3224.99% (p=0.002 n=6)
 
-      │ static-worker │    static-worker-no-patch    │    static-worker-no-heap     │       static-worker-no-glue        │       static-worker-no-opt        │      static-worker-no-leaking      │        static-worker-plain        │
-      │    sec/op     │   sec/op     vs base         │   sec/op     vs base         │   sec/op     vs base               │   sec/op     vs base              │   sec/op     vs base               │   sec/op     vs base              │
-Start     40.16m ± 3%   40.16m ± 3%  ~ (p=0.937 n=6)   40.19m ± 3%  ~ (p=0.818 n=6)   50.45m ± 3%  +25.63% (p=0.002 n=6)   36.81m ± 5%  -8.35% (p=0.002 n=6)   47.65m ± 2%  +18.64% (p=0.002 n=6)   43.29m ± 3%  +7.78% (p=0.002 n=6)
+      │ static-worker │      static-worker-no-patch       │    static-worker-no-heap     │       static-worker-no-glue        │       static-worker-no-opt        │      static-worker-no-leaking      │        static-worker-plain        │
+      │    sec/op     │   sec/op     vs base              │   sec/op     vs base         │   sec/op     vs base               │   sec/op     vs base              │   sec/op     vs base               │   sec/op     vs base              │
+Start     39.88m ± 3%   42.22m ± 6%  +5.86% (p=0.002 n=6)   39.83m ± 2%  ~ (p=0.937 n=6)   47.32m ± 2%  +18.64% (p=0.002 n=6)   36.36m ± 5%  -8.85% (p=0.002 n=6)   47.10m ± 1%  +18.11% (p=0.002 n=6)   41.82m ± 2%  +4.86% (p=0.002 n=6)
 ```

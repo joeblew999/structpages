@@ -75,6 +75,22 @@ func TestTodoListPartial(t *testing.T) {
 
 Leave the headers off to get the full page. The `<html` check is also how to catch a region request that fell through to a whole-document `Page` (see [Regions shared across pages](./rendering.md#regions-shared-across-pages)). With `HTMXv4RenderTarget` configured, htmx 4 sends `HX-Target` as `tag#id` (for example `div#` + `id`); see [HTMX Integration](./htmx.md).
 
+## Every page, recorded (the `e2e` package)
+
+`github.com/jackielii/structpages/e2e` tests an app end to end through its `http.Handler`, in-process, with no
+server. `e2e.Crawl` requests `/` and every link, form and htmx request reachable from it, and compares each answer
+with a recording; `go test -update` writes the recording instead. `e2e.Bench` times every GET in it.
+
+```go
+func TestE2E(t *testing.T)      { e2e.Crawl(t, handler(), "testdata/e2e.generated.txt") }
+func BenchmarkE2E(b *testing.B) { e2e.Bench(b, handler(), "testdata/e2e.generated.txt") }
+```
+
+Record it from the standard build, then run the same test with `-tags structpages_static` and under `tinygo test`:
+any answer that differs is a difference between the builds. A change to the recording is a change in what the app
+answers, so review its diff. `e2e.Reads` gives the recorded GETs, with their answers, to a client timing the app as
+served.
+
 ## Every URL resolves
 
 `URLFor` returns an error for a page that isn't mounted, a renamed `Ref` or a missing param, but only when that line runs. For URLs built from runtime data, resolve an inventory of every URL family the app generates once at startup and refuse to boot if one fails — see [URLFor & ID → Validation](./urlfor.md#validation-no-dangling-urls-in-production). Call the same function from a test so CI catches it first. [`examples/url-validation`](../examples/url-validation/) has the runnable version, with an integration test that renders pages and checks their `href`s.

@@ -494,7 +494,7 @@ reference.md §Lint lists the categories, the gsx specifics and the suppression 
 
 structpages finds a page's methods, fills their parameters and resolves `ID(ctx, p.Content)` through method
 reflection. With generated code instead, it runs without it: on the standard toolchain with `-tags
-structpages_static` (on `todo`'s page about a fifth faster), and under TinyGo, whose `reflect` can't list or
+structpages_static` (as fast as reflection on `todo`'s page), and under TinyGo, whose `reflect` can't list or
 call methods or name a function. `structpages-static generate` generates it; pages don't change.
 
 ```shell
@@ -518,6 +518,39 @@ go tool structpages-static generate -tags tinygo ./... # when some files build o
   functions.
 - Routing needs nothing: in the static builds `Mount` routes through its own copy of Go's `ServeMux` (TinyGo's
   lacks Go 1.22 patterns), handing your mux only the mount's prefix. See docs/static.md, and docs/tinygo.md for Workers.
+
+### Serving as a Cloudflare Worker
+
+A TinyGo WebAssembly build can't listen on a socket, so the app keeps its ordinary `main` (built `!(js && wasm)`,
+`http.ListenAndServe(":8080", handler())`) and adds one for the Worker, in a file of its own:
+
+```go
+//go:build js && wasm
+
+package main
+
+import "github.com/jackielii/structpages/workers"
+
+func main() { workers.Serve(handler()) }
+```
+
+`structpages-workers` builds the Worker, its JavaScript glue and its configs. Its defaults are the fastest build it
+knows, so use it without flags:
+
+```shell
+go get -tool github.com/jackielii/structpages/tools/workers/cmd/structpages-workers@latest
+go tool structpages-workers tinygo -o build/tinygo   # once: TinyGo with its runtime patched
+go tool structpages-workers                          # the Worker, into build/
+workerd serve build/config.capnp                     # locally, on :8080
+wrangler deploy -c build/wrangler.jsonc              # on Cloudflare
+```
+
+- Build an app whose requests each allocate megabytes, or that streams for minutes, with `-gc precise`: the
+  default collector never collects, and a runtime whose heap is used up is replaced.
+- Keep state in D1, KV or Durable Objects, not in Go variables: each Go runtime has its own memory.
+- Put public files (CSS, JS, images) in Workers Static Assets: Cloudflare serves them without running the Worker,
+  free. Files behind a login stay in Go.
+
 ## Key rules
 
 1. Read path params with `r.PathValue("itemId")`.

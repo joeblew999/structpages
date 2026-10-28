@@ -182,7 +182,7 @@ the steps it needs first, in order: for an example, `generate:gsx` (`.x.go` from
 answers), then `test`, `build`, `serve` and `bench`, each way. The library has the same, less what only an app has.
 Each folder's section of `mise.toml` sets its steps out; the examples' generated files are committed, as upstream
 commits `.x.go`. Where a step needs more than one plain command, `structpages-dev` (`tools/dev`, which mise builds)
-does that one step: a test summary, a benchmark, a report or a server.
+does that one step: a test summary, a benchmark, a report, a server, a profile or a deploy.
 
 | Task | Runs |
 |---|---|
@@ -225,19 +225,19 @@ answering the same page with no app behind it:
 
 | CPU per request | dynamic | static | static-worker |
 |---|---|---|---|
-| the build, served | 39.2 µs | 40.0 µs | 78.8 µs |
-| its server alone, no app | 35.1 µs (Go's net/http) | 35.1 µs | 56.0 µs (workerd) |
-| **the way's own** | 4.1 µs | 4.9 µs | 22.8 µs |
+| the build, served | 39.3 µs | 39.7 µs | 78.2 µs |
+| its server alone, no app | 35.6 µs (Go's net/http) | 35.6 µs | 56.9 µs (workerd) |
+| **the way's own** | 3.6 µs | 4.1 µs | 21.3 µs |
 
-The Worker built as TinyGo and workers-go ship took **2,621 µs** for the same page: with every trick, **78.8 µs, 97%
-less**. Turning one off at a time, against the 78.8 µs: no glue (workers-go's, and so TinyGo's collector) 632 µs; no
-starting heap 294 µs; TinyGo's own collector 102 µs; the TinyGo as installed 90 µs; `-opt z` 85 µs (within the
+The Worker built as TinyGo and workers-go ship took **2,600 µs** for the same page: with every trick, **78.2 µs, 97%
+less**. Turning one off at a time, against the 78.2 µs: no glue (workers-go's, and so TinyGo's collector) 607 µs; no
+starting heap 293 µs; TinyGo's own collector 99 µs; the TinyGo as installed 88 µs; `-opt z` 83 µs (within the
 noise). Its `app.wasm` is 574 KB gzipped, a fifth of Workers Free's 3 MB.
 
 **Where TinyGo stands against Go.** On the same machine the Worker still costs twice the CPU of a Go server: workerd
-alone, answering with no app, costs more (56 µs) than the whole Go server running todo (39 µs), and the Worker's own
-part, TinyGo's WebAssembly with the glue, is 22.8 µs against Go's 4–5 µs. TinyGo's code is slower than Go's even
-natively (15.2 µs against 4.7 µs in-process, with TinyGo's native collector), and slower again as WebAssembly in V8.
+alone, answering with no app, costs more (57 µs) than the whole Go server running todo (39 µs), and the Worker's own
+part, TinyGo's WebAssembly with the glue, is 21.3 µs against Go's 3.6–4.1 µs. TinyGo's code is slower than Go's even
+natively (16.8 µs against 4.7 µs in-process, with TinyGo's native collector), and slower again as WebAssembly in V8.
 On Cloudflare, workerd's own work is Cloudflare's: a Worker is billed for its own CPU, here about 0.02 ms a request.
 Deployed (`example:todo:bench:cloudflare`), every request Cloudflare logged took **0 ms of CPU**: its logs count whole
 milliseconds, so a page costs under one, as a TypeScript Worker's does in charter's own comparison (its

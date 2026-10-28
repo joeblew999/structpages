@@ -76,23 +76,25 @@ compares the copy with Go 1.26's own `net/http` mux, which TinyGo doesn't have.
 **Benchmarks** (`mise run bench`, results in [BENCH_GENERATED.md](./BENCH_GENERATED.md)), on an
 Apple M2 Pro:
 
-- **Static vs dynamic: about even** (geometric mean 2% faster). Faster where reflection is costly,
-  naming a function for `ID` (−39% to −63%, half the bytes). Slower where it's cheap: `Mount` +9–15%, `URLFor`
-  +6–19%, `isComponent` +63%, because each generated lookup is a map lookup keyed by `reflect.Type` where `reflect`
-  reads a field.
-- **Static-worker vs dynamic: about 3.4× the time and 2–3× the bytes.** Generated costs about the same as reflection
-  on Go, so this gap is TinyGo's compiler, runtime and garbage collector, not structpages. A simple GET is 2.5µs. These
-  TinyGo runs are native binaries, not WebAssembly.
+- **Static vs dynamic: 7% slower** (geometric mean). Faster where reflection is costly: naming a function
+  (`extractMethodInfo` of one, −59%), an `ID` by `Ref` (−40%) or by a chain (−20%). Slower where it's cheap: `URLFor`
+  +3–20%, serving a request +10–30%, `isComponent` +66%, `Mount` about 2× (so `CompleteFlow_SimpleGET`, which mounts
+  every time, +64%), because each generated lookup is a map lookup keyed by `reflect.Type` where `reflect` reads a
+  field.
+- **Static-worker vs dynamic: about 2.4× the time** (geometric mean) **and 1.3–3× the bytes.** These TinyGo runs are
+  native binaries, not WebAssembly, with TinyGo's native collector: the gap is TinyGo's compiler, runtime and
+  collector, not structpages.
 - **A real page** (`mise run example:todo:bench`, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md)):
-  `todo`'s `GET /` takes 4.7µs in-process both with reflection and generated, and 15.2µs under TinyGo (natively). It
-  was 9.7µs and 7.5µs: `URLFor` and `ID` now work a page type's route and a method's id out once, where they walked
-  the page tree on every call.
-- **As a Worker in workerd**, the server's CPU per request for `todo`'s `GET /`: 2,621µs as TinyGo and workers-go
-  ship; 78.8µs with every trick, all of charter's and some more, each on by default in `structpages-workers`
+  `todo`'s `GET /` takes 4.7µs in-process with reflection, 4.8µs generated (the same, within the noise), and 16.8µs
+  under TinyGo (natively). It was 9.7µs and 7.5µs: `URLFor` and `ID` now work a page type's route and a method's id
+  out once, where they walked the page tree on every call.
+- **As a Worker in workerd**, the server's CPU per request for `todo`'s `GET /`: 2,600µs as TinyGo and workers-go
+  ship; 78.2µs with every trick, all of charter's and some more, each on by default in `structpages-workers`
   ([README](./README.md#on-cloudflare-workers-every-trick-on-by-default), [docs/tinygo.md](./docs/tinygo.md)). A Go
-  server takes 39µs. Each server alone, answering with no app, takes 35µs (net/http) and 56µs (workerd), so the
-  ways' own parts are about 4.5µs (Go) and 22.8µs (the Worker). The report builds the Worker with each trick turned
-  off, to show what each saves.
+  server takes 39µs. Each server alone, answering with no app, takes 35.6µs (net/http) and 56.9µs (workerd), so the
+  ways' own parts are 3.6–4.1µs (Go) and 21.3µs (the Worker). The report builds the Worker with each trick turned
+  off, to show what each saves. Deployed, every request Cloudflare logged took 0 ms of CPU (it counts whole
+  milliseconds).
 
 **Generator gaps** (`generator_gaps_test.go`: one test per app pattern, run all three ways by the suite; reflection's
 answer is the one the other two must give):

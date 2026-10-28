@@ -33,6 +33,8 @@ Read these files in order to learn the library: `README.md` for the elevator pit
 
 - `structpages-lint` (under `tools/lint/`): static analyzer for `URLFor` / `Ref` / `ID` / `IDTarget` call sites (categories `urlfor`, `ref`, `idfor`, `params`), `.go` string literals equal to a mounted route (`route-literal`), and URL-bearing HTML attributes in `.gsx` and `.templ` files (`url-attr`). gsx `|> url`/`id`/`target` filters are checked through the generated `.x.go`. Install: `go install github.com/jackielii/structpages/tools/lint/cmd/structpages-lint@latest`. Suppress with `//structpages:lint:ignore <cat>` in Go, or `// structpages:lint:ignore <cat>` in gsx/templ. README "Lint Tool" and `skills/structpages/reference.md` "Lint" sections have the full category list.
 
+- `structpages-workers` (its own module, `tools/workers/`): builds a structpages app as a Cloudflare Worker (TinyGo WebAssembly, the JavaScript glue, a workerd config and a `wrangler.jsonc`); its defaults are the fastest build, and `structpages-workers tinygo` makes the TinyGo it patches. The app's Worker `main` calls `workers.Serve(handler())` (package `github.com/jackielii/structpages/workers`, its own module). See `docs/tinygo.md`.
+
 - `structpages-static generate` (its own module, `tools/static/`): writes `structpages_static.generated.go` into each package with pages, for the static builds (built only under `tinygo` or the `structpages_static` tag). Install: `go get -tool github.com/jackielii/structpages/tools/static/cmd/structpages-static@latest`; run after `go tool gsx generate`. See `docs/static.md`.
 
 ## Optional

@@ -72,6 +72,7 @@ go tool gsx fmt -w .
 4. **URL Generation**: Type-safe URL generation via `URLFor`
    - `url_for.go`: `URLFor`, segment parsing, automatic param extraction from current request route
    - `id_for.go`: `Ref` type for dynamic name/route-based references when static type lookup doesn't fit
+   - `parse.go`'s `parseContext.routes` and `.ids`: a typed page value's route pattern, by type, and a method's id, by its method info, the page served and the form, filled on first use (the tree is final once `Mount` returns). Every `URLFor`/`ID` used to walk the tree; keep request-time lookups off it
 
 5. **Middleware Support**: Standard Go middleware with route metadata
    - `MiddlewareFunc = func(http.Handler, *PageNode) http.Handler` — middleware receives the `PageNode`
@@ -89,6 +90,13 @@ go tool gsx fmt -w .
    - `methods_dynamic.go` (the standard build): `reflect` and `runtime.FuncForPC`; never call those directly elsewhere
    - `methods_static.go` (`tinygo || structpages_static`): the generated code in package `static`, filled by the files structpages-static generate (`tools/static`, its own module) writes, since TinyGo's `reflect` has none of the above (`docs/tinygo.md`)
    - Tests: `go run -C tools/static ./cmd/structpages-static generate -C "$PWD" -test ./... && go test -tags structpages_static ./...` runs the suite as TinyGo builds it, on the standard toolchain (CI's Static build). `staticBuild` and `skipInTablesBuild` mark the few cases only `reflect` can do
+
+8. **This fork's tinygo branch: Workers, and mise**: every step is a task in `mise.toml` (`mise tasks` lists them; each example's section sets out its order: generate, test, build, serve, bench, all three ways)
+   - `workers/` (its own module): `workers.Serve`, the Go side of the Worker's glue: a request in and its answer out as numbers through `//go:wasmexport structpages_serve` and `//go:wasmimport structpages respond`/`write`, the bytes in Go's memory; it tells the glue when its heap is used up
+   - `tools/workers/` (its own module): `structpages-workers` builds the Worker (glue `worker.mjs`, `config.capnp`, `wrangler.jsonc`, `app.wasm`); its defaults are the fastest build, each flag turns one trick off. `structpages-workers tinygo` makes `build/tinygo`, TinyGo with its `patches` applied (mise's `tools:tinygo`)
+   - `e2e/` (in this module): `Crawl` records an app's answers and compares them every build; `Bench` and `Reads` time them
+   - `tools/dev/` (its own module, this repo only): `structpages-dev`, one step per command for mise: test summaries, benches (in-process, served, the servers alone, Cloudflare), reports, serving, profiling, deploying
+   - `docs/tinygo.md` is the authoritative description of the Worker; `examples/todo/BENCH_GENERATED.md` its numbers
 
 ### Key Design Patterns
 

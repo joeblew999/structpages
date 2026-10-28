@@ -2,80 +2,79 @@
 
 # library: benchmarks, three ways
 
-- reflect: standard Go, structpages reading methods through reflect
-- generated: standard Go, reading generated code instead (-tags structpages_static)
-- tinygo: TinyGo, which reads the generated code too
+- dynamic: standard Go, structpages finding the app's methods at run time, with reflect
+- static: standard Go, methods known at compile time from generated code (-tags structpages_static)
+- static-worker: a Cloudflare Worker: TinyGo WebAssembly, static too, built with every one of structpages-workers' defaults
 
-Commit 426ca1d, 2026-10-28T10:19Z.
+Commit 015f1f2 + uncommitted changes, 2026-10-28T17:05Z.
 go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
-6 runs of 200ms each.
 
 ## In-process
 
-Each way's test binary calls the code directly (TinyGo's natively, and it reports no allocs/op).
+Each way's test binary calls the code directly, 6 runs of 200ms each (TinyGo's natively, and it reports no allocs/op).
 
 ```
-                                                 │   reflect    │               generated               │                  tinygo                   │
-                                                 │    sec/op    │    sec/op      vs base                │     sec/op       vs base                  │
-Parsing/parseTag_Simple                            22.37n ±  2%    23.41n ± 13%    +4.69% (p=0.002 n=6)     40.38n ±   6%     +80.57% (p=0.002 n=6)
-Parsing/parseTag_WithMethod                        48.23n ±  1%    49.48n ±  2%    +2.60% (p=0.004 n=6)     97.11n ±   1%    +101.36% (p=0.002 n=6)
-Parsing/parseTag_WithMethodAndTitle                87.08n ±  5%    86.69n ±  4%         ~ (p=0.621 n=6)    213.50n ±   2%    +145.16% (p=0.002 n=6)
-Parsing/parseSegments_NoParams                     33.34n ±  2%    33.62n ±  5%         ~ (p=0.818 n=6)    159.75n ±   1%    +379.15% (p=0.002 n=6)
-Parsing/parseSegments_OneParam                     67.19n ±  7%    67.34n ± 10%         ~ (p=0.937 n=6)    176.85n ±   1%    +163.23% (p=0.002 n=6)
-Parsing/parseSegments_MultipleParams               206.3n ±  4%    216.1n ±  5%    +4.73% (p=0.004 n=6)     643.8n ±   1%    +212.07% (p=0.002 n=6)
-Parsing/parseSegments_Wildcard                     67.80n ±  2%    75.04n ± 10%   +10.67% (p=0.026 n=6)    179.80n ±   1%    +165.19% (p=0.002 n=6)
-Parsing/parsePageTree_Simple                       279.1n ± 12%    277.8n ±  8%         ~ (p=0.699 n=6)    1206.0n ±  11%    +332.18% (p=0.002 n=6)
-Parsing/parsePageTree_Medium                       276.4n ± 13%    273.0n ± 46%         ~ (p=1.000 n=6)    1188.5n ±   0%    +329.91% (p=0.002 n=6)
-Parsing/parsePageTree_Complex                      257.2n ±  4%    298.0n ±  5%   +15.84% (p=0.002 n=6)    1195.5n ±   0%    +364.81% (p=0.002 n=6)
-Mount/Mount_Simple_3Routes                         1.569µ ±  8%    3.425µ ±  8%  +118.33% (p=0.002 n=6)    27.832µ ±  61%   +1674.43% (p=0.002 n=6)
-Mount/Mount_Medium_20Routes                        15.73µ ±  3%    20.49µ ±  2%   +30.25% (p=0.002 n=6)    104.07µ ±  47%    +561.62% (p=0.002 n=6)
-Mount/Mount_WithMiddleware                         1.730µ ±  3%    3.274µ ±  2%   +89.30% (p=0.002 n=6)    24.829µ ±  98%   +1335.59% (p=0.002 n=6)
-RequestHandling/ServeHTTP_SimpleGET                756.6n ±  2%    903.8n ±  2%   +19.44% (p=0.002 n=6)    5354.5n ± 137%    +607.66% (p=0.002 n=6)
-RequestHandling/ServeHTTP_WithParams               969.2n ±  9%   1308.5n ±  5%   +35.01% (p=0.002 n=6)    4035.5n ±  48%    +316.37% (p=0.002 n=6)
-RequestHandling/ServeHTTP_WithProps                1.175µ ±  9%    1.423µ ±  4%   +21.16% (p=0.002 n=6)     4.481µ ±   1%    +281.48% (p=0.002 n=6)
-RequestHandling/ServeHTTP_HTMX_Partial             771.5n ±  6%    940.1n ±  3%   +21.86% (p=0.002 n=6)    3514.5n ±   2%    +355.54% (p=0.002 n=6)
-RequestHandling/ServeHTTP_POST_Form                763.7n ±  5%    904.0n ±  2%   +18.38% (p=0.002 n=6)    3020.5n ±   0%    +295.51% (p=0.002 n=6)
-URLGeneration/URLFor_NoParams                      166.0n ±  3%    212.6n ±  6%   +28.11% (p=0.002 n=6)     556.9n ±   0%    +235.61% (p=0.002 n=6)
-URLGeneration/URLFor_OneParam_Positional           320.5n ±  6%    352.3n ±  2%    +9.94% (p=0.002 n=6)     770.0n ±   1%    +140.29% (p=0.002 n=6)
-URLGeneration/URLFor_MultipleParams_Positional     464.2n ±  7%    520.7n ±  3%   +12.17% (p=0.002 n=6)    1068.5n ±   1%    +130.18% (p=0.002 n=6)
-URLGeneration/URLFor_WithMap                       327.2n ±  7%    353.2n ±  1%    +7.93% (p=0.002 n=6)     790.8n ±   1%    +141.65% (p=0.002 n=6)
-URLGeneration/URLFor_WithContext                   272.2n ±  5%    302.2n ±  3%   +11.02% (p=0.002 n=6)     734.2n ±   0%    +169.75% (p=0.002 n=6)
-URLGeneration/URLFor_Repeated_10Times              2.951µ ±  6%    3.477µ ±  1%   +17.82% (p=0.002 n=6)     7.690µ ±   1%    +160.59% (p=0.002 n=6)
-URLGenerationStrict/Bare_UniqueType                360.0n ±  0%    426.9n ±  5%   +18.61% (p=0.002 n=6)     990.1n ±   0%    +175.07% (p=0.002 n=6)
-URLGenerationStrict/Chain_TwoLevel_NoParams        373.0n ±  1%    409.1n ±  2%    +9.69% (p=0.002 n=6)     937.5n ±   1%    +151.37% (p=0.002 n=6)
-URLGenerationStrict/Chain_TwoLevel_WithMap         467.2n ±  4%    500.9n ±  2%    +7.20% (p=0.002 n=6)    1079.0n ±   0%    +130.95% (p=0.002 n=6)
-URLGenerationStrict/Chain_PlusFragment             638.2n ±  9%    653.2n ±  6%         ~ (p=0.240 n=6)    1328.5n ±   0%    +108.15% (p=0.002 n=6)
-URLGenerationStrict/Ref_Qualified_TwoSegments      317.2n ± 10%    326.9n ±  2%         ~ (p=0.065 n=6)     719.1n ±   2%    +126.70% (p=0.002 n=6)
-URLGenerationStrict/Ref_Qualified_WithMap          406.2n ±  3%    424.7n ±  1%    +4.54% (p=0.002 n=6)     860.1n ±   1%    +111.73% (p=0.002 n=6)
-URLGenerationStrict/Ref_SingleName                 309.6n ± 10%    347.6n ± 13%   +12.29% (p=0.002 n=6)     824.5n ±   2%    +166.35% (p=0.002 n=6)
-URLGenerationStrict/StrictAmbiguity_ErrorPath      861.4n ±  2%    852.2n ±  3%         ~ (p=0.699 n=6)    1638.5n ±   2%     +90.21% (p=0.002 n=6)
-URLGenerationStrict/Chain_ThreeLevel               395.4n ±  5%    453.0n ±  1%   +14.58% (p=0.002 n=6)    1005.5n ±   4%    +154.33% (p=0.002 n=6)
-IDGeneration/IDFor_UnboundMethod                   121.0n ±  4%    122.8n ±  2%         ~ (p=0.394 n=6)     469.3n ±   5%    +287.85% (p=0.002 n=6)
-IDGeneration/IDFor_BoundMethod                     292.2n ±  5%    197.4n ± 14%   -32.43% (p=0.002 n=6)     581.7n ±   7%     +99.11% (p=0.002 n=6)
-IDGeneration/IDFor_Ref                             243.3n ±  9%    144.4n ±  0%   -40.64% (p=0.002 n=6)     464.1n ±   3%     +90.69% (p=0.002 n=6)
-IDGeneration/IDTarget_UnboundMethod                142.7n ±  2%    142.1n ±  0%         ~ (p=0.452 n=6)     491.1n ±  10%    +244.27% (p=0.002 n=6)
-URLGenerationV05/Typed                             308.8n ±  2%    354.6n ±  0%   +14.83% (p=0.002 n=6)     807.7n ±   1%    +161.54% (p=0.002 n=6)
-URLGenerationV05/StringAsRef                       295.7n ±  5%    326.1n ±  2%   +10.28% (p=0.002 n=6)     784.6n ±   4%    +165.38% (p=0.002 n=6)
-URLGenerationV05/ExplicitRef                       285.8n ±  2%    327.6n ±  1%   +14.65% (p=0.002 n=6)     767.8n ±   1%    +168.70% (p=0.002 n=6)
-IDGenerationV06/SelfRender_MethodExpr              250.3n ±  2%    153.6n ±  9%   -38.63% (p=0.002 n=6)     425.3n ±   1%     +69.92% (p=0.002 n=6)
-IDGenerationV06/CrossPage_SameNameMounts_NoError   2.703µ ±  3%    2.741µ ± 10%         ~ (p=0.240 n=6)     5.398µ ±   4%     +99.74% (p=0.002 n=6)
-IDGenerationV06/Chain_StringTerminal               387.0n ±  5%    296.3n ±  1%   -23.43% (p=0.002 n=6)     732.8n ±   0%     +89.38% (p=0.002 n=6)
-IDGenerationV06/Chain_MethodExprTerminal           453.1n ±  3%    355.9n ±  5%   -21.43% (p=0.002 n=6)     950.9n ±   0%    +109.88% (p=0.002 n=6)
-Reflection/extractMethodInfo_Unbound               11.32n ±  1%    10.18n ±  1%   -10.11% (p=0.002 n=6)    102.45n ±   0%    +804.64% (p=0.002 n=6)
-Reflection/extractMethodInfo_Bound                 19.18n ± 24%    19.46n ±  1%         ~ (p=0.132 n=6)    103.70n ±   0%    +440.81% (p=0.002 n=6)
-Reflection/extractMethodInfo_Function              71.12n ±  4%    28.62n ±  1%   -59.76% (p=0.002 n=6)    183.55n ±  10%    +158.08% (p=0.002 n=6)
-Reflection/callMethod_NoArgs                       188.5n ± 13%    191.0n ±  1%         ~ (p=0.076 n=6)     328.1n ±   6%     +74.08% (p=0.002 n=6)
-Reflection/callMethod_WithDI                       284.2n ±  5%    296.1n ±  0%         ~ (p=0.063 n=6)     624.8n ±   8%    +119.85% (p=0.002 n=6)
-Reflection/isComponent                             22.29n ±  8%    36.18n ±  0%   +62.31% (p=0.002 n=6)     83.48n ±   3%    +274.54% (p=0.002 n=6)
-StringConversion/camelToKebab_Short                37.79n ±  2%    37.43n ±  1%         ~ (p=0.258 n=6)    135.00n ±   1%    +257.28% (p=0.002 n=6)
-StringConversion/camelToKebab_Long                 93.16n ±  1%    93.06n ±  1%         ~ (p=0.589 n=6)    358.45n ±   7%    +284.77% (p=0.002 n=6)
-StringConversion/camelToKebab_WithAcronym          48.52n ±  2%    47.44n ±  1%         ~ (p=0.093 n=6)    151.35n ±   5%    +211.97% (p=0.002 n=6)
-EndToEnd/CompleteFlow_SimpleGET                    4.892µ ± 17%    7.359µ ±  3%   +50.44% (p=0.002 n=6)   624.759µ ±  88%  +12672.34% (p=0.002 n=6)
-EndToEnd/CompleteFlow_WithURLGeneration            1.700µ ± 11%    1.926µ ±  4%   +13.29% (p=0.009 n=6)    66.715µ ± 190%   +3824.38% (p=0.002 n=6)
-geomean                                            280.6n          296.8n          +5.75%                   983.1n           +250.32%
+                                                 │   dynamic    │                static                │               static-worker               │
+                                                 │    sec/op    │    sec/op     vs base                │     sec/op       vs base                  │
+Parsing/parseTag_Simple                            22.05n ±  3%    22.06n ± 1%         ~ (p=1.000 n=6)     30.11n ±   0%     +36.56% (p=0.002 n=6)
+Parsing/parseTag_WithMethod                        48.23n ±  4%    47.56n ± 0%         ~ (p=0.093 n=6)     67.65n ±   0%     +40.28% (p=0.002 n=6)
+Parsing/parseTag_WithMethodAndTitle                84.34n ±  0%    84.84n ± 0%    +0.59% (p=0.006 n=6)    146.70n ±   0%     +73.93% (p=0.002 n=6)
+Parsing/parseSegments_NoParams                     32.60n ±  0%    32.45n ± 0%    -0.46% (p=0.011 n=6)    129.10n ±   0%    +296.01% (p=0.002 n=6)
+Parsing/parseSegments_OneParam                     62.70n ±  1%    65.05n ± 1%    +3.75% (p=0.002 n=6)    128.90n ±   0%    +105.57% (p=0.002 n=6)
+Parsing/parseSegments_MultipleParams               197.8n ±  3%    209.0n ± 1%    +5.71% (p=0.002 n=6)     502.5n ±   0%    +154.08% (p=0.002 n=6)
+Parsing/parseSegments_Wildcard                     64.83n ±  7%    66.22n ± 1%         ~ (p=0.065 n=6)    126.00n ±   0%     +94.37% (p=0.002 n=6)
+Parsing/parsePageTree_Simple                       253.0n ± 18%    258.1n ± 1%         ~ (p=0.485 n=6)    1049.5n ±   0%    +314.90% (p=0.002 n=6)
+Parsing/parsePageTree_Medium                       246.2n ±  1%    258.3n ± 3%    +4.94% (p=0.002 n=6)    1047.0n ±   0%    +325.35% (p=0.002 n=6)
+Parsing/parsePageTree_Complex                      245.3n ±  2%    257.4n ± 1%    +4.89% (p=0.002 n=6)    1046.5n ±   0%    +326.53% (p=0.002 n=6)
+Mount/Mount_Simple_3Routes                         1.502µ ±  1%    3.181µ ± 5%  +111.78% (p=0.002 n=6)    21.474µ ±  75%   +1329.73% (p=0.002 n=6)
+Mount/Mount_Medium_20Routes                        15.33µ ±  8%    20.23µ ± 1%   +32.02% (p=0.002 n=6)     80.37µ ±  53%    +424.41% (p=0.002 n=6)
+Mount/Mount_WithMiddleware                         1.539µ ±  1%    3.144µ ± 1%  +104.29% (p=0.002 n=6)    80.201µ ±  43%   +5111.24% (p=0.002 n=6)
+RequestHandling/ServeHTTP_SimpleGET                745.2n ±  7%    856.1n ± 1%   +14.89% (p=0.002 n=6)    6791.5n ± 409%    +811.37% (p=0.002 n=6)
+RequestHandling/ServeHTTP_WithParams               942.0n ±  1%   1227.0n ± 1%   +30.25% (p=0.002 n=6)    5008.5n ±   6%    +431.69% (p=0.002 n=6)
+RequestHandling/ServeHTTP_WithProps                1.156µ ±  1%    1.319µ ± 2%   +14.06% (p=0.002 n=6)     3.207µ ±  61%    +177.38% (p=0.002 n=6)
+RequestHandling/ServeHTTP_HTMX_Partial             757.1n ±  1%    885.1n ± 0%   +16.90% (p=0.002 n=6)    2330.0n ±   3%    +207.75% (p=0.002 n=6)
+RequestHandling/ServeHTTP_POST_Form                734.6n ±  1%    859.2n ± 2%   +16.96% (p=0.002 n=6)    2176.0n ±   3%    +196.20% (p=0.002 n=6)
+URLGeneration/URLFor_NoParams                      67.06n ±  0%    69.26n ± 0%    +3.27% (p=0.002 n=6)    146.95n ±   0%    +119.13% (p=0.002 n=6)
+URLGeneration/URLFor_OneParam_Positional           149.7n ±  1%    159.6n ± 2%    +6.62% (p=0.002 n=6)     482.9n ±  58%    +222.69% (p=0.002 n=6)
+URLGeneration/URLFor_MultipleParams_Positional     256.5n ±  1%    269.2n ± 0%    +4.97% (p=0.002 n=6)     799.2n ±   1%    +211.64% (p=0.002 n=6)
+URLGeneration/URLFor_WithMap                       156.5n ±  1%    166.8n ± 1%    +6.58% (p=0.002 n=6)     207.6n ±   2%     +32.65% (p=0.002 n=6)
+URLGeneration/URLFor_WithContext                   143.8n ±  1%    151.9n ± 2%    +5.63% (p=0.002 n=6)     217.0n ±   1%     +50.92% (p=0.002 n=6)
+URLGeneration/URLFor_Repeated_10Times              1.496µ ±  1%    1.597µ ± 3%    +6.79% (p=0.002 n=6)     4.806µ ±   1%    +221.33% (p=0.002 n=6)
+URLGenerationStrict/Bare_UniqueType                139.2n ±  1%    152.9n ± 1%    +9.88% (p=0.002 n=6)     211.9n ±   1%     +52.25% (p=0.002 n=6)
+URLGenerationStrict/Chain_TwoLevel_NoParams        375.7n ±  3%    396.8n ± 0%    +5.62% (p=0.002 n=6)     636.6n ±   5%     +69.47% (p=0.002 n=6)
+URLGenerationStrict/Chain_TwoLevel_WithMap         424.4n ±  2%    448.7n ± 3%    +5.73% (p=0.002 n=6)     701.0n ±   1%     +65.16% (p=0.002 n=6)
+URLGenerationStrict/Chain_PlusFragment             532.1n ±  0%    556.5n ± 1%    +4.59% (p=0.002 n=6)     818.9n ±   2%     +53.92% (p=0.002 n=6)
+URLGenerationStrict/Ref_Qualified_TwoSegments      299.5n ±  5%    320.5n ± 1%    +7.01% (p=0.002 n=6)     541.1n ±   1%     +80.70% (p=0.002 n=6)
+URLGenerationStrict/Ref_Qualified_WithMap          349.9n ±  2%    369.4n ± 4%    +5.59% (p=0.002 n=6)     595.2n ±   5%     +70.13% (p=0.002 n=6)
+URLGenerationStrict/Ref_SingleName                 295.5n ±  1%    346.0n ± 1%   +17.09% (p=0.002 n=6)     592.3n ±   0%    +100.44% (p=0.002 n=6)
+URLGenerationStrict/StrictAmbiguity_ErrorPath      822.2n ±  3%    864.1n ± 2%    +5.10% (p=0.002 n=6)    1265.5n ±   0%     +53.92% (p=0.002 n=6)
+URLGenerationStrict/Chain_ThreeLevel               388.1n ±  1%    445.6n ± 0%   +14.82% (p=0.002 n=6)     563.3n ±   4%     +45.16% (p=0.002 n=6)
+IDGeneration/IDFor_UnboundMethod                   29.49n ±  1%    29.55n ± 0%         ~ (p=0.061 n=6)     43.80n ±   0%     +48.52% (p=0.002 n=6)
+IDGeneration/IDFor_BoundMethod                     38.91n ±  2%    39.62n ± 1%    +1.82% (p=0.026 n=6)     44.76n ±   1%     +15.05% (p=0.002 n=6)
+IDGeneration/IDFor_Ref                             237.0n ±  0%    141.8n ± 1%   -40.15% (p=0.002 n=6)     249.1n ±  13%      +5.11% (p=0.002 n=6)
+IDGeneration/IDTarget_UnboundMethod                29.54n ±  2%    29.89n ± 0%         ~ (p=0.065 n=6)     43.85n ±   2%     +48.43% (p=0.002 n=6)
+URLGenerationV05/Typed                             156.8n ±  1%    166.6n ± 2%    +6.25% (p=0.002 n=6)     207.5n ±  15%     +32.33% (p=0.002 n=6)
+URLGenerationV05/StringAsRef                       245.6n ±  1%    292.1n ± 1%   +18.96% (p=0.002 n=6)     473.1n ±   0%     +92.67% (p=0.002 n=6)
+URLGenerationV05/ExplicitRef                       244.5n ±  0%    292.3n ± 1%   +19.57% (p=0.002 n=6)     457.0n ±   2%     +86.95% (p=0.002 n=6)
+IDGenerationV06/SelfRender_MethodExpr              31.52n ±  2%    32.03n ± 2%    +1.65% (p=0.022 n=6)     46.82n ±   1%     +48.56% (p=0.002 n=6)
+IDGenerationV06/CrossPage_SameNameMounts_NoError   2.495µ ±  3%    2.634µ ± 2%    +5.57% (p=0.002 n=6)     3.280µ ±  11%     +31.47% (p=0.002 n=6)
+IDGenerationV06/Chain_StringTerminal               375.9n ±  4%    292.9n ± 0%   -22.06% (p=0.002 n=6)     353.8n ±   3%      -5.88% (p=0.002 n=6)
+IDGenerationV06/Chain_MethodExprTerminal           436.3n ±  1%    357.1n ± 0%   -18.14% (p=0.002 n=6)     402.4n ±   0%      -7.77% (p=0.002 n=6)
+Reflection/extractMethodInfo_Unbound               13.90n ±  0%    14.04n ± 0%    +1.04% (p=0.002 n=6)     14.41n ±   1%      +3.71% (p=0.002 n=6)
+Reflection/extractMethodInfo_Bound                 20.36n ±  1%    20.38n ± 1%         ~ (p=0.472 n=6)     14.50n ±   1%     -28.79% (p=0.002 n=6)
+Reflection/extractMethodInfo_Function              67.89n ±  2%    28.14n ± 2%   -58.55% (p=0.002 n=6)     55.78n ±   7%     -17.85% (p=0.002 n=6)
+Reflection/callMethod_NoArgs                       179.2n ±  7%    188.1n ± 1%         ~ (p=0.065 n=6)     440.5n ±   8%    +145.79% (p=0.002 n=6)
+Reflection/callMethod_WithDI                       277.2n ±  0%    297.2n ± 0%    +7.21% (p=0.002 n=6)     333.3n ±   1%     +20.20% (p=0.002 n=6)
+Reflection/isComponent                             22.04n ±  0%    36.60n ± 0%   +66.10% (p=0.002 n=6)     43.48n ±   1%     +97.30% (p=0.002 n=6)
+StringConversion/camelToKebab_Short                36.30n ±  1%    37.53n ± 1%    +3.40% (p=0.002 n=6)     51.77n ±   3%     +42.62% (p=0.002 n=6)
+StringConversion/camelToKebab_Long                 90.25n ±  6%    92.68n ± 0%         ~ (p=0.058 n=6)    107.70n ±   2%     +19.34% (p=0.002 n=6)
+StringConversion/camelToKebab_WithAcronym          46.02n ±  3%    47.55n ± 1%    +3.34% (p=0.002 n=6)     62.11n ±   1%     +34.99% (p=0.002 n=6)
+EndToEnd/CompleteFlow_SimpleGET                    4.507µ ±  2%    7.413µ ± 3%   +64.48% (p=0.002 n=6)   586.230µ ±  86%  +12907.10% (p=0.002 n=6)
+EndToEnd/CompleteFlow_WithURLGeneration            1.503µ ±  2%    1.727µ ± 3%   +14.87% (p=0.002 n=6)    85.523µ ± 199%   +5590.15% (p=0.002 n=6)
+geomean                                            213.2n          228.8n         +7.33%                   511.5n           +139.92%
 
-                                                 │    reflect     │               generated               │                tinygo                 │
-                                                 │      B/op      │     B/op      vs base                 │     B/op       vs base                │
+                                                 │    dynamic     │                static                 │              static-worker              │
+                                                 │      B/op      │     B/op      vs base                 │     B/op       vs base                  │
 Parsing/parseTag_Simple                              16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹     32.00 ±  0%  +100.00% (p=0.002 n=6)
 Parsing/parseTag_WithMethod                          32.00 ± 0%       32.00 ± 0%        ~ (p=1.000 n=6) ¹     80.00 ±  0%  +150.00% (p=0.002 n=6)
 Parsing/parseTag_WithMethodAndTitle                  80.00 ± 0%       80.00 ± 0%        ~ (p=1.000 n=6) ¹    176.00 ±  0%  +120.00% (p=0.002 n=6)
@@ -83,59 +82,59 @@ Parsing/parseSegments_NoParams                       48.00 ± 0%       48.00 ± 
 Parsing/parseSegments_OneParam                       144.0 ± 0%       144.0 ± 0%        ~ (p=1.000 n=6) ¹     192.0 ±  0%   +33.33% (p=0.002 n=6)
 Parsing/parseSegments_MultipleParams                 720.0 ± 0%       720.0 ± 0%        ~ (p=1.000 n=6) ¹     944.0 ±  0%   +31.11% (p=0.002 n=6)
 Parsing/parseSegments_Wildcard                       144.0 ± 0%       144.0 ± 0%        ~ (p=1.000 n=6) ¹     192.0 ±  0%   +33.33% (p=0.002 n=6)
-Parsing/parsePageTree_Simple                         624.0 ± 0%       624.0 ± 0%        ~ (p=1.000 n=6) ¹    2048.0 ±  0%  +228.21% (p=0.002 n=6)
-Parsing/parsePageTree_Medium                         624.0 ± 0%       624.0 ± 0%        ~ (p=1.000 n=6) ¹    2048.0 ±  0%  +228.21% (p=0.002 n=6)
-Parsing/parsePageTree_Complex                        624.0 ± 0%       624.0 ± 0%        ~ (p=1.000 n=6) ¹    2048.0 ±  0%  +228.21% (p=0.002 n=6)
-Mount/Mount_Simple_3Routes                         2.070Ki ± 0%     3.306Ki ± 0%  +59.67% (p=0.002 n=6)     9.778Ki ± 11%  +372.31% (p=0.002 n=6)
-Mount/Mount_Medium_20Routes                        17.44Ki ± 0%     18.68Ki ± 0%   +7.12% (p=0.002 n=6)     43.10Ki ±  0%  +147.18% (p=0.002 n=6)
-Mount/Mount_WithMiddleware                         2.109Ki ± 0%     3.361Ki ± 0%  +59.33% (p=0.002 n=6)     9.972Ki ± 21%  +372.73% (p=0.002 n=6)
-RequestHandling/ServeHTTP_SimpleGET                1.506Ki ± 0%     1.528Ki ± 0%   +1.49% (p=0.002 n=6)     2.953Ki ±  0%   +96.11% (p=0.002 n=6)
-RequestHandling/ServeHTTP_WithParams               2.209Ki ± 0%     2.278Ki ± 0%   +3.14% (p=0.002 n=6)     3.594Ki ±  0%   +62.69% (p=0.002 n=6)
-RequestHandling/ServeHTTP_WithProps                2.167Ki ± 0%     2.221Ki ± 0%   +2.48% (p=0.002 n=6)     4.062Ki ±  0%   +87.47% (p=0.002 n=6)
-RequestHandling/ServeHTTP_HTMX_Partial             1.506Ki ± 0%     1.528Ki ± 0%   +1.49% (p=0.002 n=6)     3.016Ki ±  0%  +100.26% (p=0.002 n=6)
-RequestHandling/ServeHTTP_POST_Form                1.506Ki ± 0%     1.528Ki ± 0%   +1.49% (p=0.002 n=6)     2.953Ki ±  0%   +96.11% (p=0.002 n=6)
-URLGeneration/URLFor_NoParams                        88.00 ± 0%       88.00 ± 0%        ~ (p=1.000 n=6) ¹    576.00 ±  0%  +554.55% (p=0.002 n=6)
-URLGeneration/URLFor_OneParam_Positional             232.0 ± 0%       232.0 ± 0%        ~ (p=1.000 n=6) ¹     720.0 ±  0%  +210.34% (p=0.002 n=6)
-URLGeneration/URLFor_MultipleParams_Positional       544.0 ± 0%       544.0 ± 0%        ~ (p=1.000 n=6) ¹    1168.0 ±  0%  +114.71% (p=0.002 n=6)
-URLGeneration/URLFor_WithMap                         232.0 ± 0%       232.0 ± 0%        ~ (p=1.000 n=6) ¹     720.0 ±  0%  +210.34% (p=0.002 n=6)
-URLGeneration/URLFor_WithContext                     216.0 ± 0%       216.0 ± 0%        ~ (p=1.000 n=6) ¹     672.0 ±  0%  +211.11% (p=0.002 n=6)
-URLGeneration/URLFor_Repeated_10Times              2.267Ki ± 0%     2.266Ki ± 0%   -0.04% (p=0.002 n=6)     7.031Ki ±  0%  +210.21% (p=0.002 n=6)
-URLGenerationStrict/Bare_UniqueType                  280.0 ± 0%       280.0 ± 0%        ~ (p=1.000 n=6) ¹     784.0 ±  0%  +180.00% (p=0.002 n=6)
-URLGenerationStrict/Chain_TwoLevel_NoParams          296.0 ± 0%       296.0 ± 0%        ~ (p=1.000 n=6) ¹     816.0 ±  0%  +175.68% (p=0.002 n=6)
-URLGenerationStrict/Chain_TwoLevel_WithMap           376.0 ± 0%       376.0 ± 0%        ~ (p=1.000 n=6) ¹     944.0 ±  0%  +151.06% (p=0.002 n=6)
-URLGenerationStrict/Chain_PlusFragment               624.0 ± 0%       624.0 ± 0%        ~ (p=1.000 n=6) ¹    1248.0 ±  0%  +100.00% (p=0.002 n=6)
+Parsing/parsePageTree_Simple                         672.0 ± 0%       672.0 ± 0%        ~ (p=1.000 n=6) ¹    2096.0 ±  0%  +211.90% (p=0.002 n=6)
+Parsing/parsePageTree_Medium                         672.0 ± 0%       672.0 ± 0%        ~ (p=1.000 n=6) ¹    2096.0 ±  0%  +211.90% (p=0.002 n=6)
+Parsing/parsePageTree_Complex                        672.0 ± 0%       672.0 ± 0%        ~ (p=1.000 n=6) ¹    2096.0 ±  0%  +211.90% (p=0.002 n=6)
+Mount/Mount_Simple_3Routes                         2.117Ki ± 0%     3.353Ki ± 0%  +58.35% (p=0.002 n=6)     9.763Ki ± 11%  +361.12% (p=0.002 n=6)
+Mount/Mount_Medium_20Routes                        17.48Ki ± 0%     18.73Ki ± 0%   +7.10% (p=0.002 n=6)     43.09Ki ±  0%  +146.46% (p=0.002 n=6)
+Mount/Mount_WithMiddleware                         2.156Ki ± 0%     3.409Ki ± 0%  +58.11% (p=0.002 n=6)     9.951Ki ±  3%  +361.48% (p=0.002 n=6)
+RequestHandling/ServeHTTP_SimpleGET                1.506Ki ± 0%     1.528Ki ± 0%   +1.49% (p=0.002 n=6)     2.906Ki ±  0%   +93.00% (p=0.002 n=6)
+RequestHandling/ServeHTTP_WithParams               2.209Ki ± 0%     2.278Ki ± 0%   +3.14% (p=0.002 n=6)     3.547Ki ±  0%   +60.57% (p=0.002 n=6)
+RequestHandling/ServeHTTP_WithProps                2.167Ki ± 0%     2.221Ki ± 0%   +2.48% (p=0.002 n=6)     4.016Ki ±  0%   +85.31% (p=0.002 n=6)
+RequestHandling/ServeHTTP_HTMX_Partial             1.506Ki ± 0%     1.528Ki ± 0%   +1.49% (p=0.002 n=6)     2.922Ki ±  0%   +94.03% (p=0.002 n=6)
+RequestHandling/ServeHTTP_POST_Form                1.506Ki ± 0%     1.528Ki ± 0%   +1.49% (p=0.002 n=6)     2.906Ki ±  0%   +93.00% (p=0.002 n=6)
+URLGeneration/URLFor_NoParams                        48.00 ± 0%       48.00 ± 0%        ~ (p=1.000 n=6) ¹    256.00 ±  0%  +433.33% (p=0.002 n=6)
+URLGeneration/URLFor_OneParam_Positional             176.0 ± 0%       176.0 ± 0%        ~ (p=1.000 n=6) ¹     384.0 ±  0%  +118.18% (p=0.002 n=6)
+URLGeneration/URLFor_MultipleParams_Positional       424.0 ± 0%       424.0 ± 0%        ~ (p=1.000 n=6) ¹     704.0 ±  0%   +66.04% (p=0.002 n=6)
+URLGeneration/URLFor_WithMap                         176.0 ± 0%       176.0 ± 0%        ~ (p=1.000 n=6) ¹     384.0 ±  0%  +118.18% (p=0.002 n=6)
+URLGeneration/URLFor_WithContext                     160.0 ± 0%       160.0 ± 0%        ~ (p=1.000 n=6) ¹     352.0 ±  0%  +120.00% (p=0.002 n=6)
+URLGeneration/URLFor_Repeated_10Times              1.719Ki ± 0%     1.719Ki ± 0%        ~ (p=1.000 n=6) ¹   3.750Ki ±  0%  +118.18% (p=0.002 n=6)
+URLGenerationStrict/Bare_UniqueType                  160.0 ± 0%       160.0 ± 0%        ~ (p=1.000 n=6) ¹     336.0 ±  0%  +110.00% (p=0.002 n=6)
+URLGenerationStrict/Chain_TwoLevel_NoParams          296.0 ± 0%       296.0 ± 0%        ~ (p=1.000 n=6) ¹     800.0 ±  0%  +170.27% (p=0.002 n=6)
+URLGenerationStrict/Chain_TwoLevel_WithMap           368.0 ± 0%       368.0 ± 0%        ~ (p=1.000 n=6) ¹     912.0 ±  0%  +147.83% (p=0.002 n=6)
+URLGenerationStrict/Chain_PlusFragment               608.0 ± 0%       608.0 ± 0%        ~ (p=1.000 n=6) ¹    1200.0 ±  0%   +97.37% (p=0.002 n=6)
 URLGenerationStrict/Ref_Qualified_TwoSegments        288.0 ± 0%       288.0 ± 0%        ~ (p=1.000 n=6) ¹     736.0 ±  0%  +155.56% (p=0.002 n=6)
-URLGenerationStrict/Ref_Qualified_WithMap            368.0 ± 0%       368.0 ± 0%        ~ (p=1.000 n=6) ¹     864.0 ±  0%  +134.78% (p=0.002 n=6)
-URLGenerationStrict/Ref_SingleName                   272.0 ± 0%       272.0 ± 0%        ~ (p=1.000 n=6) ¹     752.0 ±  0%  +176.47% (p=0.002 n=6)
+URLGenerationStrict/Ref_Qualified_WithMap            360.0 ± 0%       360.0 ± 0%        ~ (p=1.000 n=6) ¹     848.0 ±  0%  +135.56% (p=0.002 n=6)
+URLGenerationStrict/Ref_SingleName                   272.0 ± 0%       272.0 ± 0%        ~ (p=1.000 n=6) ¹     736.0 ±  0%  +170.59% (p=0.002 n=6)
 URLGenerationStrict/StrictAmbiguity_ErrorPath        776.0 ± 0%       776.0 ± 0%        ~ (p=1.000 n=6) ¹    1456.0 ±  0%   +87.63% (p=0.002 n=6)
-URLGenerationStrict/Chain_ThreeLevel                 280.0 ± 0%       280.0 ± 0%        ~ (p=1.000 n=6) ¹     912.0 ±  0%  +225.71% (p=0.002 n=6)
-IDGeneration/IDFor_UnboundMethod                     72.00 ± 0%       72.00 ± 0%        ~ (p=1.000 n=6) ¹    336.00 ±  0%  +366.67% (p=0.002 n=6)
-IDGeneration/IDFor_BoundMethod                      176.00 ± 0%       88.00 ± 0%  -50.00% (p=0.002 n=6)      352.00 ±  0%  +100.00% (p=0.002 n=6)
-IDGeneration/IDFor_Ref                              168.00 ± 0%       80.00 ± 0%  -52.38% (p=0.002 n=6)      432.00 ±  0%  +157.14% (p=0.002 n=6)
-IDGeneration/IDTarget_UnboundMethod                  120.0 ± 0%       120.0 ± 0%        ~ (p=1.000 n=6) ¹     384.0 ±  0%  +220.00% (p=0.002 n=6)
-URLGenerationV05/Typed                               232.0 ± 0%       232.0 ± 0%        ~ (p=1.000 n=6) ¹     720.0 ±  0%  +210.34% (p=0.002 n=6)
-URLGenerationV05/StringAsRef                         224.0 ± 0%       224.0 ± 0%        ~ (p=1.000 n=6) ¹     720.0 ±  0%  +221.43% (p=0.002 n=6)
-URLGenerationV05/ExplicitRef                         224.0 ± 0%       224.0 ± 0%        ~ (p=1.000 n=6) ¹     688.0 ±  0%  +207.14% (p=0.002 n=6)
-IDGenerationV06/SelfRender_MethodExpr               152.00 ± 0%       64.00 ± 0%  -57.89% (p=0.002 n=6)      208.00 ±  0%   +36.84% (p=0.002 n=6)
-IDGenerationV06/CrossPage_SameNameMounts_NoError   2.674Ki ± 0%     2.672Ki ± 0%   -0.07% (p=0.002 n=6)     4.562Ki ±  0%   +70.64% (p=0.002 n=6)
-IDGenerationV06/Chain_StringTerminal                 304.0 ± 0%       216.0 ± 0%  -28.95% (p=0.002 n=6)       656.0 ±  0%  +115.79% (p=0.002 n=6)
-IDGenerationV06/Chain_MethodExprTerminal             320.0 ± 0%       232.0 ± 0%  -27.50% (p=0.002 n=6)       768.0 ±  0%  +140.00% (p=0.002 n=6)
-Reflection/extractMethodInfo_Unbound                  0.00 ± 0%        0.00 ± 0%        ~ (p=1.000 n=6) ¹     48.00 ±  0%         ? (p=0.002 n=6)
-Reflection/extractMethodInfo_Bound                   16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹     48.00 ±  0%  +200.00% (p=0.002 n=6)
-Reflection/extractMethodInfo_Function                16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹    112.00 ±  0%  +600.00% (p=0.002 n=6)
+URLGenerationStrict/Chain_ThreeLevel                 280.0 ± 0%       280.0 ± 0%        ~ (p=1.000 n=6) ¹     896.0 ±  0%  +220.00% (p=0.002 n=6)
+IDGeneration/IDFor_UnboundMethod                     0.000 ± 0%       0.000 ± 0%        ~ (p=1.000 n=6) ¹     0.000 ±  0%         ~ (p=1.000 n=6) ¹
+IDGeneration/IDFor_BoundMethod                       16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹      0.00 ±  0%  -100.00% (p=0.002 n=6)
+IDGeneration/IDFor_Ref                              168.00 ± 0%       80.00 ± 0%  -52.38% (p=0.002 n=6)      416.00 ±  0%  +147.62% (p=0.002 n=6)
+IDGeneration/IDTarget_UnboundMethod                  0.000 ± 0%       0.000 ± 0%        ~ (p=1.000 n=6) ¹     0.000 ±  0%         ~ (p=1.000 n=6) ¹
+URLGenerationV05/Typed                               176.0 ± 0%       176.0 ± 0%        ~ (p=1.000 n=6) ¹     384.0 ±  0%  +118.18% (p=0.002 n=6)
+URLGenerationV05/StringAsRef                         224.0 ± 0%       224.0 ± 0%        ~ (p=1.000 n=6) ¹     688.0 ±  0%  +207.14% (p=0.002 n=6)
+URLGenerationV05/ExplicitRef                         224.0 ± 0%       224.0 ± 0%        ~ (p=1.000 n=6) ¹     656.0 ±  0%  +192.86% (p=0.002 n=6)
+IDGenerationV06/SelfRender_MethodExpr                0.000 ± 0%       0.000 ± 0%        ~ (p=1.000 n=6) ¹     0.000 ±  0%         ~ (p=1.000 n=6) ¹
+IDGenerationV06/CrossPage_SameNameMounts_NoError   2.674Ki ± 0%     2.672Ki ± 0%   -0.07% (p=0.002 n=6)     4.500Ki ±  0%   +68.30% (p=0.002 n=6)
+IDGenerationV06/Chain_StringTerminal                 304.0 ± 0%       216.0 ± 0%  -28.95% (p=0.002 n=6)       640.0 ±  0%  +110.53% (p=0.002 n=6)
+IDGenerationV06/Chain_MethodExprTerminal             320.0 ± 0%       232.0 ± 0%  -27.50% (p=0.002 n=6)       704.0 ±  0%  +120.00% (p=0.002 n=6)
+Reflection/extractMethodInfo_Unbound                 0.000 ± 0%       0.000 ± 0%        ~ (p=1.000 n=6) ¹     0.000 ±  0%         ~ (p=1.000 n=6) ¹
+Reflection/extractMethodInfo_Bound                   16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹      0.00 ±  0%  -100.00% (p=0.002 n=6)
+Reflection/extractMethodInfo_Function                16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹     64.00 ±  0%  +300.00% (p=0.002 n=6)
 Reflection/callMethod_NoArgs                         170.0 ± 0%       194.0 ± 0%  +14.12% (p=0.002 n=6)       400.0 ±  0%  +135.29% (p=0.002 n=6)
 Reflection/callMethod_WithDI                         218.0 ± 0%       250.0 ± 0%  +14.68% (p=0.002 n=6)       592.0 ±  0%  +171.56% (p=0.002 n=6)
 Reflection/isComponent                                0.00 ± 0%        0.00 ± 0%        ~ (p=1.000 n=6) ¹     32.00 ±  0%         ? (p=0.002 n=6)
 StringConversion/camelToKebab_Short                  16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹     64.00 ±  0%  +300.00% (p=0.002 n=6)
 StringConversion/camelToKebab_Long                   32.00 ± 0%       32.00 ± 0%        ~ (p=1.000 n=6) ¹     96.00 ±  0%  +200.00% (p=0.002 n=6)
 StringConversion/camelToKebab_WithAcronym            16.00 ± 0%       16.00 ± 0%        ~ (p=1.000 n=6) ¹     64.00 ±  0%  +300.00% (p=0.002 n=6)
-EndToEnd/CompleteFlow_SimpleGET                    11.58Ki ± 0%     12.50Ki ± 0%   +8.01% (p=0.002 n=6)     24.24Ki ±  0%  +109.41% (p=0.002 n=6)
-EndToEnd/CompleteFlow_WithURLGeneration            6.265Ki ± 0%     6.258Ki ± 0%   -0.11% (p=0.002 n=6)     8.359Ki ±  0%   +33.44% (p=0.002 n=6)
-geomean                                                         ²                  -2.72%               ²     726.2        ?
+EndToEnd/CompleteFlow_SimpleGET                    11.62Ki ± 0%     12.55Ki ± 0%   +7.99% (p=0.002 n=6)     24.13Ki ± 17%  +107.62% (p=0.002 n=6)
+EndToEnd/CompleteFlow_WithURLGeneration            6.202Ki ± 0%     6.195Ki ± 0%   -0.11% (p=0.002 n=6)     7.969Ki ±  0%   +28.48% (p=0.002 n=6)
+geomean                                                         ²                  +0.05%               ²                  ?                      ²
 ¹ all samples are equal
 ² summaries must be >0 to compute geomean
 
-                                                 │    reflect    │              generated               │
+                                                 │    dynamic    │                static                │
                                                  │   allocs/op   │  allocs/op   vs base                 │
 Parsing/parseTag_Simple                             1.000 ± 0%      1.000 ± 0%        ~ (p=1.000 n=6) ¹
 Parsing/parseTag_WithMethod                         1.000 ± 0%      1.000 ± 0%        ~ (p=1.000 n=6) ¹
@@ -155,29 +154,29 @@ RequestHandling/ServeHTTP_WithParams                25.00 ± 0%      29.00 ± 0%
 RequestHandling/ServeHTTP_WithProps                 32.00 ± 0%      36.00 ± 0%  +12.50% (p=0.002 n=6)
 RequestHandling/ServeHTTP_HTMX_Partial              21.00 ± 0%      22.00 ± 0%   +4.76% (p=0.002 n=6)
 RequestHandling/ServeHTTP_POST_Form                 21.00 ± 0%      22.00 ± 0%   +4.76% (p=0.002 n=6)
-URLGeneration/URLFor_NoParams                       5.000 ± 0%      5.000 ± 0%        ~ (p=1.000 n=6) ¹
-URLGeneration/URLFor_OneParam_Positional            9.000 ± 0%      9.000 ± 0%        ~ (p=1.000 n=6) ¹
-URLGeneration/URLFor_MultipleParams_Positional      13.00 ± 0%      13.00 ± 0%        ~ (p=1.000 n=6) ¹
-URLGeneration/URLFor_WithMap                        9.000 ± 0%      9.000 ± 0%        ~ (p=1.000 n=6) ¹
-URLGeneration/URLFor_WithContext                    7.000 ± 0%      7.000 ± 0%        ~ (p=1.000 n=6) ¹
-URLGeneration/URLFor_Repeated_10Times               90.00 ± 0%      90.00 ± 0%        ~ (p=1.000 n=6) ¹
-URLGenerationStrict/Bare_UniqueType                 10.00 ± 0%      10.00 ± 0%        ~ (p=1.000 n=6) ¹
+URLGeneration/URLFor_NoParams                       1.000 ± 0%      1.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGeneration/URLFor_OneParam_Positional            4.000 ± 0%      4.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGeneration/URLFor_MultipleParams_Positional      7.000 ± 0%      7.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGeneration/URLFor_WithMap                        4.000 ± 0%      4.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGeneration/URLFor_WithContext                    3.000 ± 0%      3.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGeneration/URLFor_Repeated_10Times               40.00 ± 0%      40.00 ± 0%        ~ (p=1.000 n=6) ¹
+URLGenerationStrict/Bare_UniqueType                 3.000 ± 0%      3.000 ± 0%        ~ (p=1.000 n=6) ¹
 URLGenerationStrict/Chain_TwoLevel_NoParams         11.00 ± 0%      11.00 ± 0%        ~ (p=1.000 n=6) ¹
-URLGenerationStrict/Chain_TwoLevel_WithMap          14.00 ± 0%      14.00 ± 0%        ~ (p=1.000 n=6) ¹
-URLGenerationStrict/Chain_PlusFragment              17.00 ± 0%      17.00 ± 0%        ~ (p=1.000 n=6) ¹
+URLGenerationStrict/Chain_TwoLevel_WithMap          13.00 ± 0%      13.00 ± 0%        ~ (p=1.000 n=6) ¹
+URLGenerationStrict/Chain_PlusFragment              15.00 ± 0%      15.00 ± 0%        ~ (p=1.000 n=6) ¹
 URLGenerationStrict/Ref_Qualified_TwoSegments       10.00 ± 0%      10.00 ± 0%        ~ (p=1.000 n=6) ¹
-URLGenerationStrict/Ref_Qualified_WithMap           13.00 ± 0%      13.00 ± 0%        ~ (p=1.000 n=6) ¹
+URLGenerationStrict/Ref_Qualified_WithMap           12.00 ± 0%      12.00 ± 0%        ~ (p=1.000 n=6) ¹
 URLGenerationStrict/Ref_SingleName                  9.000 ± 0%      9.000 ± 0%        ~ (p=1.000 n=6) ¹
 URLGenerationStrict/StrictAmbiguity_ErrorPath       28.00 ± 0%      28.00 ± 0%        ~ (p=1.000 n=6) ¹
 URLGenerationStrict/Chain_ThreeLevel                14.00 ± 0%      14.00 ± 0%        ~ (p=1.000 n=6) ¹
-IDGeneration/IDFor_UnboundMethod                    3.000 ± 0%      3.000 ± 0%        ~ (p=1.000 n=6) ¹
-IDGeneration/IDFor_BoundMethod                      6.000 ± 0%      4.000 ± 0%  -33.33% (p=0.002 n=6)
+IDGeneration/IDFor_UnboundMethod                    0.000 ± 0%      0.000 ± 0%        ~ (p=1.000 n=6) ¹
+IDGeneration/IDFor_BoundMethod                      1.000 ± 0%      1.000 ± 0%        ~ (p=1.000 n=6) ¹
 IDGeneration/IDFor_Ref                              6.000 ± 0%      4.000 ± 0%  -33.33% (p=0.002 n=6)
-IDGeneration/IDTarget_UnboundMethod                 4.000 ± 0%      4.000 ± 0%        ~ (p=1.000 n=6) ¹
-URLGenerationV05/Typed                              9.000 ± 0%      9.000 ± 0%        ~ (p=1.000 n=6) ¹
-URLGenerationV05/StringAsRef                        8.000 ± 0%      8.000 ± 0%        ~ (p=1.000 n=6) ¹
-URLGenerationV05/ExplicitRef                        8.000 ± 0%      8.000 ± 0%        ~ (p=1.000 n=6) ¹
-IDGenerationV06/SelfRender_MethodExpr               5.000 ± 0%      3.000 ± 0%  -40.00% (p=0.002 n=6)
+IDGeneration/IDTarget_UnboundMethod                 0.000 ± 0%      0.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGenerationV05/Typed                              4.000 ± 0%      4.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGenerationV05/StringAsRef                        7.000 ± 0%      7.000 ± 0%        ~ (p=1.000 n=6) ¹
+URLGenerationV05/ExplicitRef                        7.000 ± 0%      7.000 ± 0%        ~ (p=1.000 n=6) ¹
+IDGenerationV06/SelfRender_MethodExpr               0.000 ± 0%      0.000 ± 0%        ~ (p=1.000 n=6) ¹
 IDGenerationV06/CrossPage_SameNameMounts_NoError    59.00 ± 0%      59.00 ± 0%        ~ (p=1.000 n=6) ¹
 IDGenerationV06/Chain_StringTerminal                9.000 ± 0%      7.000 ± 0%  -22.22% (p=0.002 n=6)
 IDGenerationV06/Chain_MethodExprTerminal           10.000 ± 0%      8.000 ± 0%  -20.00% (p=0.002 n=6)
@@ -191,17 +190,10 @@ StringConversion/camelToKebab_Short                 1.000 ± 0%      1.000 ± 0%
 StringConversion/camelToKebab_Long                  1.000 ± 0%      1.000 ± 0%        ~ (p=1.000 n=6) ¹
 StringConversion/camelToKebab_WithAcronym           1.000 ± 0%      1.000 ± 0%        ~ (p=1.000 n=6) ¹
 EndToEnd/CompleteFlow_SimpleGET                     88.00 ± 0%     100.00 ± 0%  +13.64% (p=0.002 n=6)
-EndToEnd/CompleteFlow_WithURLGeneration             31.00 ± 0%      31.00 ± 0%        ~ (p=1.000 n=6) ¹
-geomean                                                        ²                 +0.02%               ²
+EndToEnd/CompleteFlow_WithURLGeneration             26.00 ± 0%      26.00 ± 0%        ~ (p=1.000 n=6) ¹
+geomean                                                        ²                 +1.70%               ²
 ¹ all samples are equal
 ² summaries must be >0 to compute geomean
 ```
 
-## As served
-
-Each way served on :8080 as its example:library:serve:<way> task serves it (tinygo: no WebAssembly in workerd,
-what Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
-
-```
-(the library is no app: nothing to serve)
-```
+The library is no app: nothing to serve or start.

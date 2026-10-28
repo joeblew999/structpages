@@ -6,7 +6,8 @@ This document tracks performance optimizations and future improvement opportunit
 
 ### 1. Cache extractMethodInfo Results
 - **Impact:** 80-89% faster reflection operations
-- **Implementation:** Global `sync.Map` cache for method info
+- **Implementation:** Global cache for method info, by `funcKey`: a `map[uintptr]` under an RWMutex (a `sync.Map`
+  keyed by `any` cost TinyGo a reflect-based hash and comparison per lookup)
 - **Benefit:** Zero allocations for unbound method lookups
 
 ### 2. Cache parseSegments Results
@@ -18,6 +19,15 @@ This document tracks performance optimizations and future improvement opportunit
 - **Impact:** 3% faster request handling with params
 - **Implementation:** Store parsed segments in PageNode at Mount time
 - **Benefit:** Zero parsing overhead in extractURLParams middleware
+
+### 4. Work URLFor's Route and ID's Id Out Once (2026-10-28)
+- **Impact:** `examples/todo`'s page about 2× faster in-process (9.7µs to 4.7µs with `reflect`, 7.5µs to 4.7µs
+  generated), as it asks for two URLs and two ids per item
+- **Implementation:** per-context caches, filled on first use: a typed page value's route pattern, by its type, and
+  a method's id, by its method info, the page being served and the form (`parseContext.routes`, `.ids`). The page
+  tree no longer changes once Mount has built it, so neither needs invalidating.
+- **Also:** URLFor's key/value arguments are matched without building maps, and its values formatted without
+  `fmt` for strings and integers (`formatArg`)
 
 ## Benchmarks
 

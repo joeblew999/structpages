@@ -33,6 +33,11 @@ You'll need Go 1.26+. The repository-root `gsx.toml` registers structpages' `url
 `target` filters for every example. `html-template/` and `url-validation/` use only the standard
 library — no gsx involved.
 
+In this repository every example also runs the other two ways, generated code on the standard toolchain and a
+Cloudflare Worker under TinyGo (`html-template/` only the first: `html/template` needs reflection TinyGo lacks), each
+step a mise task: `mise tasks` lists them, `mise run example:todo:serve:static-worker` serves todo as a Worker in
+workerd, and `mise run example:todo:bench` writes its `BENCH_GENERATED.md`.
+
 ---
 
 [`lint-misuse/`](./lint-misuse) isn't an app to learn from: it's the test fixture for `structpages-lint`, a set of deliberate misuses whose findings `lint_test.go` pins.

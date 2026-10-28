@@ -44,129 +44,87 @@ done
 git status --short -- examples
 '''
 
-# Serving, on http://localhost:8080 until Ctrl-C: example:<name>:serve:reflect, example:<name>:serve:generated,
-# and example:<name>:serve:tinygo, which builds it as WebAssembly into examples/<name>/worker.generated/ and runs it in
-# workerd. A TinyGo build can't listen on a socket, so tinygo needs an example that serves through the workers
-# module (workers.Serve, workers.NewMux), as todo does.
-
-[tasks._example]
-description = "Serve examples/<name> on :8080, reflect, generated or tinygo."
-hide = true
-raw = true
-quiet = true
-usage = '''
-arg "<name>" help="the example's folder under examples/"
-arg "[way]" help="reflect, generated or tinygo" default="reflect"
-'''
-run = '''
-set -eu
-cd "examples/$usage_name"
-if grep -q 'gsxhq/gsx/cmd/gsx' go.mod; then go tool gsx generate -q .; fi
-gen() { go run -C "{{config_root}}/tools/gen" ./cmd/structpages-gen -C "$PWD" "$@" ./...; }
-listgen() { find . -name 'structpages*.generated*.go' | sed 's|^\./|  |'; }
-case "$usage_way" in
-reflect)
-  echo "examples/$usage_name, reflect: http://localhost:8080. Ctrl-C stops it."
-  exec go run . ;;
-generated)
-  gen
-  echo "examples/$usage_name, generated: http://localhost:8080, reading this generated code instead of reflect:"
-  listgen; echo "Ctrl-C stops it."
-  exec go run -tags structpages_generated . ;;
-tinygo)
-  if ! grep -q 'structpages/workers ' go.mod; then
-    echo "examples/$usage_name can't run under TinyGo yet: it needs to serve through the workers module, like examples/todo" >&2; exit 2
-  fi
-  gen -tags tinygo
-  out=worker.generated; rm -rf "$out"; mkdir -p "$out"
-  go run "github.com/syumai/workers-go/cmd/workers-assets-gen@$(go list -m github.com/syumai/workers-go | cut -d' ' -f2)" -mode tinygo -o "$out"
-  tinygo build -o "$out/app.wasm" -target wasm -no-debug .
-  # Our worker.mjs, over the one just written (one Go runtime per isolate, not per request), and config.capnp.
-  go run -C "{{config_root}}/tools/workers" ./cmd/structpages-workers -o "$PWD/$out"
-  echo "examples/$usage_name, tinygo: http://localhost:8080, $(du -k "$out/app.wasm" | cut -f1) KB of WebAssembly in workerd,"
-  echo "reading this generated code:"; listgen; echo "Ctrl-C stops it."
-  exec workerd serve "$out/config.capnp" ;;
-*) echo "the way is reflect, generated or tinygo, not $usage_way" >&2; exit 2 ;;
-esac
-'''
+# Serving an example on http://localhost:8080 until Ctrl-C, with structpages-check serve: example:<name>:serve:reflect,
+# :serve:generated, and :serve:tinygo, WebAssembly in workerd, for an example that serves through workers.Serve, as
+# todo does (a TinyGo build can't listen on a socket).
 
 [tasks."example:blog:serve:reflect"]
 description = "Serve examples/blog on :8080, reflect."
 raw = true
 quiet = true
-run = "mise run _example blog"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/blog reflect"
 
 [tasks."example:blog:serve:generated"]
 description = "Serve examples/blog on :8080, generated."
 raw = true
 quiet = true
-run = "mise run _example blog generated"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/blog generated"
 
 [tasks."example:html-template:serve:reflect"]
 description = "Serve examples/html-template on :8080, reflect."
 raw = true
 quiet = true
-run = "mise run _example html-template"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/html-template reflect"
 
 [tasks."example:html-template:serve:generated"]
 description = "Serve examples/html-template on :8080, generated."
 raw = true
 quiet = true
-run = "mise run _example html-template generated"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/html-template generated"
 
 [tasks."example:htmx:serve:reflect"]
 description = "Serve examples/htmx on :8080, reflect."
 raw = true
 quiet = true
-run = "mise run _example htmx"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx reflect"
 
 [tasks."example:htmx:serve:generated"]
 description = "Serve examples/htmx on :8080, generated."
 raw = true
 quiet = true
-run = "mise run _example htmx generated"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx generated"
 
 [tasks."example:htmx-render-target:serve:reflect"]
 description = "Serve examples/htmx-render-target on :8080, reflect."
 raw = true
 quiet = true
-run = "mise run _example htmx-render-target"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx-render-target reflect"
 
 [tasks."example:htmx-render-target:serve:generated"]
 description = "Serve examples/htmx-render-target on :8080, generated."
 raw = true
 quiet = true
-run = "mise run _example htmx-render-target generated"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/htmx-render-target generated"
 
 [tasks."example:simple:serve:reflect"]
 description = "Serve examples/simple on :8080, reflect."
 raw = true
 quiet = true
-run = "mise run _example simple"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/simple reflect"
 
 [tasks."example:simple:serve:generated"]
 description = "Serve examples/simple on :8080, generated."
 raw = true
 quiet = true
-run = "mise run _example simple generated"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/simple generated"
 
 [tasks."example:todo:serve:reflect"]
 description = "Serve examples/todo on :8080, reflect."
 raw = true
 quiet = true
-run = "mise run _example todo"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/todo reflect"
 
 [tasks."example:todo:serve:generated"]
 description = "Serve examples/todo on :8080, generated."
 raw = true
 quiet = true
-run = "mise run _example todo generated"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/todo generated"
 
 [tasks."example:todo:serve:tinygo"]
 description = "Serve examples/todo on :8080, tinygo: WebAssembly in workerd."
 raw = true
 quiet = true
-run = "mise run _example todo tinygo"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/todo tinygo"
 
 [tasks."example:todo:test"]
 description = "examples/todo's tests three ways: reflect, generated, tinygo."
@@ -176,19 +134,19 @@ run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} test exa
 [tasks."example:todo:bench"]
 description = "examples/todo's benchmarks three ways, into examples/todo/BENCH_GENERATED.md."
 quiet = true
-run = "mise run _bench examples/todo"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} bench examples/todo"
 
 [tasks."example:url-validation:serve:reflect"]
 description = "Serve examples/url-validation on :8080, reflect."
 raw = true
 quiet = true
-run = "mise run _example url-validation"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/url-validation reflect"
 
 [tasks."example:url-validation:serve:generated"]
 description = "Serve examples/url-validation on :8080, generated."
 raw = true
 quiet = true
-run = "mise run _example url-validation generated"
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} serve examples/url-validation generated"
 
 # ---- The repo's two tools, over every example -------------------------------------------------------------------
 
@@ -235,111 +193,13 @@ run = [
 description = """The library's benchmarks three ways (6 runs of 200ms each), compared with benchstat, into \
 BENCH_GENERATED.md."""
 quiet = true
-run = "mise run _bench ."
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} bench ."
 
 [tasks."bench:examples"]
 description = """Every example's benchmarks three ways, in-process and as served, each into its own BENCH_GENERATED.md, \
 as bench does for the library. One example: example:<name>:bench."""
 quiet = true
-run = '''
-for d in examples/*/; do
-  grep -qs '^func Benchmark' "$d"*_test.go || continue
-  mise run _bench "${d%/}" || exit 1
-done
-'''
-
-[tasks._bench]
-description = """The benchmarks of <dir> (. for the library, or examples/<name>) three ways, compared with benchstat, into \
-<dir>/BENCH_GENERATED.md; an example serving through workers is timed as served too (tinygo: WebAssembly in workerd)."""
-hide = true
-quiet = true
-shell = "bash -c"
-usage = '''arg "<dir>" help=". for the library, or examples/<name>"'''
-run = '''
-set -euo pipefail
-d=$usage_dir; name=$([ "$d" = . ] && echo library || basename "$d")
-# What this run generates goes when it ends, as it fails or not: the code, and the WebAssembly served in workerd.
-cleanup() {
-  find "$d" \( -path "$d/examples" -o -path "$d/tools" \) -prune -o -name 'structpages*.generated*.go' -print0 | xargs -0 rm -f
-  rm -rf "$d/worker.generated"
-}
-trap cleanup EXIT
-if ! grep -qs '^func Benchmark' "$d"/*_test.go; then
-  echo "$d has no benchmarks yet: add a BenchmarkCheck to its check_test.go, like examples/todo's" >&2; exit 2
-fi
-flags=(-run NoTest -bench . -benchmem -count 6 -benchtime 200ms)
-gen() { go run -C tools/gen ./cmd/structpages-gen -C "{{config_root}}/$d" -test "$@" ./... 2> >(grep -v 'structpages-gen: warning' >&2); }
-if grep -q 'gsxhq/gsx/cmd/gsx' "$d/go.mod"; then (cd "$d" && go tool gsx generate -q .); fi
-
-# In-process: each way's own test binary calls the code directly.
-echo "== $name, in-process: reflect..."; reflect=$(cd "$d" && go test "${flags[@]}" .)
-echo "== $name, in-process: generated..."; gen; generated=$(cd "$d" && go test -tags structpages_generated "${flags[@]}" .)
-echo "== $name, in-process: tinygo..."; gen -tags tinygo
-# TinyGo prints no -N CPU suffix or goos/pkg/cpu lines, and 0 for every allocs/op, so those are left out.
-tinygo=$(cd "$d" && tinygo test "${flags[@]}" . | sed -E 's/[[:space:]]+0 allocs\/op//')
-result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$reflect") generated=<(echo "$generated") tinygo=<(echo "$tinygo"))
-echo "$result"
-
-# As served, for an example serving through workers: each way started as its example:<name>:serve:<way> task serves
-# it, on :8080, and timed over local HTTP by one standard Go client (CHECK_URL), so all three pay the same network
-# cost. Times only: allocations would be the client's.
-served() {
-  if lsof -ti tcp:8080 >/dev/null; then echo "port 8080 is in use: stop what is on it first" >&2; exit 1; fi
-  mise run _example "$name" "$1" >/dev/null 2>&1 &
-  curl -s -o /dev/null --retry-connrefused --retry 300 --retry-delay 1 --max-time 400 http://localhost:8080/ ||
-    { echo "$d, $1: the server never answered" >&2; exit 1; }
-  (cd "$d" && CHECK_URL=http://localhost:8080 go test -run NoTest -bench . -count 6 -benchtime 200ms .)
-  lsof -ti tcp:8080 | xargs kill 2>/dev/null || true
-  wait 2>/dev/null || true
-  while lsof -ti tcp:8080 >/dev/null; do sleep 0.2; done
-}
-if [ "$d" = . ]; then
-  served_result="(the library is no app: nothing to serve)"
-elif grep -q 'structpages/workers ' "$d/go.mod"; then
-  echo "== $name, served: reflect..."; s_reflect=$(served reflect)
-  echo "== $name, served: generated..."; s_generated=$(served generated)
-  echo "== $name, served: tinygo, in workerd..."; s_tinygo=$(served tinygo)
-  wasm="$(du -k "$d/worker.generated/app.wasm" | cut -f1) KB of"
-  served_result=$(benchstat -ignore goos,goarch,pkg,cpu,/gomaxprocs reflect=<(echo "$s_reflect") generated=<(echo "$s_generated") tinygo=<(echo "$s_tinygo"))
-  echo "$served_result"
-else
-  served_result="(not served: $d doesn't serve through the workers module yet)"
-fi
-
-# Before the file is written: writing it would count as an uncommitted change.
-stamp="Commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . ":!$d/BENCH_GENERATED.md" || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)."
-cat > "$d/BENCH_GENERATED.md" <<EOT
-<!-- Generated by \`mise run $([ "$d" = . ] && echo bench || echo "example:$name:bench")\`. Do not edit: run it again. -->
-
-# $name: benchmarks, three ways
-
-- reflect: standard Go, structpages reading methods through reflect
-- generated: standard Go, reading generated code instead (-tags structpages_generated)
-- tinygo: TinyGo, which reads the generated code too
-
-$stamp
-$(go version | cut -d' ' -f3-), $(tinygo version | cut -d' ' -f3-4), $(echo "$reflect" | sed -n 's/^cpu: //p'), workerd $(workerd --version 2>/dev/null | cut -d' ' -f2).
-6 runs of 200ms each.
-
-## In-process
-
-Each way's test binary calls the code directly (TinyGo's natively, and it reports no allocs/op).
-
-\`\`\`
-$result
-\`\`\`
-
-## As served
-
-Each way served on :8080 as its example:$name:serve:<way> task serves it (tinygo: ${wasm:-no} WebAssembly in workerd,
-what Cloudflare runs), timed over local HTTP by one standard Go client, so all three pay the same network cost.
-
-\`\`\`
-$served_result
-\`\`\`
-EOT
-echo "wrote $d/BENCH_GENERATED.md"
-'''
+run = "go run -C tools/check/cmd/structpages-check . -C {{config_root}} bench examples/..."
 
 # ---- What upstream's CI checks, on standard Go --------------------------------------------------------------------
 

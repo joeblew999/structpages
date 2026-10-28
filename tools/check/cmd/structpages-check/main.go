@@ -43,7 +43,9 @@ func main() {
 	dir := flag.String("C", "", "change to `dir` before anything else, as go -C does")
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr,
-			"usage: structpages-check [-C dir] test [-ways reflect,generated,tinygo] [-skip name,...] folder...")
+			"usage: structpages-check [-C dir] test [-ways reflect,generated,tinygo] [-skip name,...] folder...\n"+
+				"       structpages-check [-C dir] bench folder...\n"+
+				"       structpages-check [-C dir] serve folder reflect|generated|tinygo")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -59,6 +61,10 @@ func main() {
 	switch cmd, args := flag.Arg(0), flag.Args()[1:]; cmd {
 	case "test":
 		os.Exit(test(args))
+	case "bench":
+		os.Exit(bench(args))
+	case "serve":
+		os.Exit(serve(args))
 	default:
 		fmt.Fprintf(os.Stderr, "structpages-check: unknown command %q\n", cmd)
 		flag.Usage()
@@ -182,10 +188,16 @@ func run(dir, name string, args ...string) (string, error) {
 }
 
 // generate writes the code a way needs for f, with its tests' (-test), and
-// the TinyGo files when tinygo is set. In this repository it runs
-// structpages-gen from tools/gen; elsewhere, the app's own go tool.
-func generate(f folder, tinygo bool) error {
-	args := []string{"-test"}
+// the TinyGo files when tinygo is set.
+func generate(f folder, tinygo bool) error { return generateWith(f, tinygo, true) }
+
+// generateWith runs structpages-gen on f: in this repository from tools/gen,
+// elsewhere the app's own go tool.
+func generateWith(f folder, tinygo, tests bool) error {
+	var args []string
+	if tests {
+		args = append(args, "-test")
+	}
 	if tinygo {
 		args = append(args, "-tags", "tinygo")
 	}

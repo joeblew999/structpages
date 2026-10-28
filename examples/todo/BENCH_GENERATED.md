@@ -4,24 +4,23 @@
 
 - dynamic: standard Go, structpages finding the app's methods at run time, with reflect
 - static: standard Go, methods known at compile time from generated code (-tags structpages_static)
-- static-worker: a Cloudflare Worker, TinyGo WebAssembly, static too
+- static-worker: a Cloudflare Worker, TinyGo WebAssembly, static too (all three, as every Worker build)
 
-Commit 34c6786 + uncommitted changes, 2026-10-28T13:56Z.
+Commit 8f01620, 2026-10-28T14:34Z.
 go1.26.10 darwin/arm64, 0.43.0 darwin/arm64, Apple M2 Pro, workerd 2026-10-19.
-6 runs of 200ms each.
 
 ## In-process
 
-Each way's test binary calls the code directly (TinyGo's natively, and it reports no allocs/op).
+Each way's test binary calls the code directly, 6 runs of 200ms each (TinyGo's natively, and it reports no allocs/op).
 
 ```
-         │   dynamic    │               static               │            static-worker             │
-         │    sec/op    │   sec/op     vs base               │    sec/op     vs base                │
-E2E/GET_   10.012µ ± 1%   7.629µ ± 7%  -23.80% (p=0.002 n=6)   33.907µ ± 0%  +238.68% (p=0.002 n=6)
+         │   dynamic   │               static               │            static-worker             │
+         │   sec/op    │   sec/op     vs base               │    sec/op     vs base                │
+E2E/GET_   9.731µ ± 3%   7.471µ ± 1%  -23.22% (p=0.002 n=6)   32.222µ ± 1%  +231.13% (p=0.002 n=6)
 
          │   dynamic    │               static                │            static-worker             │
          │     B/op     │     B/op      vs base               │     B/op      vs base                │
-E2E/GET_   14.15Ki ± 0%   12.44Ki ± 0%  -12.06% (p=0.002 n=6)   31.31Ki ± 0%  +121.37% (p=0.002 n=6)
+E2E/GET_   14.14Ki ± 0%   12.44Ki ± 0%  -12.07% (p=0.002 n=6)   31.31Ki ± 0%  +121.38% (p=0.002 n=6)
 
          │  dynamic   │              static               │
          │ allocs/op  │ allocs/op   vs base               │
@@ -30,21 +29,56 @@ E2E/GET_   169.0 ± 0%   133.0 ± 0%  -21.30% (p=0.002 n=6)
 
 ## As served
 
-Each way served on :8080 as its example:todo:serve:<way> task serves it (static-worker: 1504 KB of WebAssembly in workerd,
-what Cloudflare runs), timed over local HTTP
-by one standard Go client, so every way pays the same network cost.
+Each way's build served on :8080 as its example:todo:serve:<way> task serves it, and every page its e2e test
+recorded sent to it by one standard Go client for 500ms at a time, 6 runs, after 250ms to warm it: the time
+a request takes (sec/op), and the server's CPU for it (cpu-sec/op), the operating system's count of the
+server process's CPU before and after, divided by the requests. CPU is what Cloudflare bills a Worker for and
+limits.
 
 ```
-         │   dynamic   │              static               │              static-worker              │
-         │   sec/op    │   sec/op     vs base              │     sec/op      vs base                 │
-E2E/GET_   67.60µ ± 1%   64.06µ ± 2%  -5.25% (p=0.002 n=6)   2555.81µ ± 52%  +3680.64% (p=0.002 n=6)
+            │   dynamic   │              static               │            static-worker             │
+            │   sec/op    │   sec/op     vs base              │    sec/op     vs base                │
+Served/GET_   59.37µ ± 2%   56.21µ ± 1%  -5.32% (p=0.002 n=6)   215.96µ ± 8%  +263.76% (p=0.002 n=6)
 
-         │   dynamic    │            static             │           static-worker            │
-         │     B/op     │     B/op      vs base         │     B/op      vs base              │
-E2E/GET_   45.82Ki ± 0%   45.82Ki ± 0%  ~ (p=0.054 n=6)   45.78Ki ± 0%  -0.09% (p=0.002 n=6)
+            │   dynamic   │               static               │             static-worker             │
+            │ cpu-sec/op  │ cpu-sec/op   vs base               │  cpu-sec/op    vs base                │
+Served/GET_   54.59µ ± 2%   46.19µ ± 2%  -15.39% (p=0.002 n=6)   150.93µ ± 48%  +176.48% (p=0.002 n=6)
+```
 
-         │  dynamic   │            static             │          static-worker           │
-         │ allocs/op  │ allocs/op   vs base           │ allocs/op   vs base              │
-E2E/GET_   79.00 ± 0%   79.00 ± 0%  ~ (p=1.000 n=6) ¹   77.00 ± 0%  -2.53% (p=0.002 n=6)
-¹ all samples are equal
+## Starting
+
+Each way's build started 6 times: the time from starting it to its first answer to GET /.
+
+```
+      │   dynamic   │            static            │             static-worker             │
+      │   sec/op    │   sec/op     vs base         │    sec/op      vs base                │
+Start   7.458m ± 5%   7.599m ± 5%  ~ (p=0.240 n=6)   40.985m ± 12%  +449.52% (p=0.002 n=6)
+```
+
+## The Worker
+
+static-worker's app.wasm is 1534 KB, 545 KB gzipped: Cloudflare allows 3 MB gzipped on Workers Free,
+10 MB on Workers Paid. structpages-workers built it with heap=8MB tinygo=../../build/tinygo glue=structpages warm=/.
+
+The Worker built five ways, to show what the patched TinyGo, the starting heap and the glue each save, served
+and started as above, compared with the first, which has none of them:
+
+- static-worker-plain: the Worker as TinyGo and workers-go ship (-heap 0 -glue workers-go)
+- static-worker-heap: with the 8 MB starting heap only (-glue workers-go)
+- static-worker-gcpatch: with the patched TinyGo only, mise's tools:tinygo (-heap 0 -glue workers-go -tinygoroot)
+- static-worker-glue: with structpages-workers' glue only: one crossing, runtimes warmed and pooled (-heap 0)
+- static-worker: a Cloudflare Worker, TinyGo WebAssembly, static too (all three, as every Worker build)
+
+```
+            │ static-worker-plain │       static-worker-heap       │        static-worker-gcpatch        │         static-worker-glue         │           static-worker            │
+            │       sec/op        │    sec/op      vs base         │    sec/op     vs base               │   sec/op     vs base               │   sec/op     vs base               │
+Served/GET_         2594.6µ ± 77%   3009.1µ ± 47%  ~ (p=0.937 n=6)   730.8µ ± 42%  -71.84% (p=0.002 n=6)   798.2µ ± 5%  -69.24% (p=0.002 n=6)   216.0µ ± 8%  -91.68% (p=0.002 n=6)
+
+            │ static-worker-plain │       static-worker-heap       │        static-worker-gcpatch        │         static-worker-glue          │            static-worker            │
+            │     cpu-sec/op      │  cpu-sec/op    vs base         │  cpu-sec/op   vs base               │  cpu-sec/op   vs base               │  cpu-sec/op   vs base               │
+Served/GET_         2558.9µ ± 76%   2948.3µ ± 41%  ~ (p=1.000 n=6)   664.8µ ± 45%  -74.02% (p=0.002 n=6)   801.6µ ± 20%  -68.67% (p=0.002 n=6)   150.9µ ± 48%  -94.10% (p=0.002 n=6)
+
+      │ static-worker-plain │      static-worker-heap      │       static-worker-gcpatch       │        static-worker-glue         │         static-worker         │
+      │       sec/op        │   sec/op     vs base         │   sec/op     vs base              │   sec/op     vs base              │    sec/op     vs base         │
+Start           42.29m ± 2%   42.44m ± 2%  ~ (p=0.180 n=6)   41.30m ± 3%  -2.35% (p=0.026 n=6)   40.70m ± 1%  -3.75% (p=0.002 n=6)   40.99m ± 12%  ~ (p=0.310 n=6)
 ```

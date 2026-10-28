@@ -30,7 +30,7 @@ func serve(args []string) int {
 
 // serveBuild runs f's build for way, build/<way>, on addr until Ctrl-C.
 func serveBuild(f folder, way string) int {
-	s, err := startBuild(f, way, os.Stdout)
+	s, err := startBuild(f, way, way, os.Stdout)
 	if err != nil {
 		fail(err)
 	}
@@ -53,10 +53,10 @@ func serveBuild(f folder, way string) int {
 }
 
 // startBuild starts f's build for way on addr, its output to out: what its
-// build task made, build/<way>, a binary, or for static-worker a Worker's
-// folder, run in workerd.
-func startBuild(f folder, way string, out io.Writer) (*server, error) {
-	built := filepath.Join(f.abs, "build", way)
+// build task made, build/<build> (build/<way>, or a variant's folder), a
+// binary, or for static-worker a Worker's folder, run in workerd.
+func startBuild(f folder, way, build string, out io.Writer) (*server, error) {
+	built := filepath.Join(f.abs, "build", build)
 	cmd := exec.Command(built) //nolint:gosec // the folder's own build
 	if way == "static-worker" {
 		cmd = exec.Command("workerd", "serve", filepath.Join(built, "config.capnp")) //nolint:gosec // its own build
@@ -64,7 +64,7 @@ func startBuild(f folder, way string, out io.Writer) (*server, error) {
 	}
 	info, err := os.Stat(built)
 	if err != nil {
-		return nil, fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", built, f.name, way)
+		return nil, fmt.Errorf("%s isn't built: build it first (mise run example:%s:build:%s)", built, f.name, build)
 	}
 	if c, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
 		_ = c.Close()

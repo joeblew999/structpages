@@ -8,7 +8,7 @@
 // that code):
 //
 //	structpages-dev test dynamic|static|static-worker
-//	structpages-dev bench dynamic|static|static-worker
+//	structpages-dev bench dynamic|static|static-worker [build]
 //	structpages-dev report
 //	structpages-dev serve dynamic|static|static-worker
 //
@@ -50,7 +50,7 @@ var root string
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: structpages-dev test dynamic|static|static-worker\n"+
-			"       structpages-dev bench dynamic|static|static-worker\n"+
+			"       structpages-dev bench dynamic|static|static-worker [build]\n"+
 			"       structpages-dev report\n"+
 			"       structpages-dev serve dynamic|static|static-worker")
 	}

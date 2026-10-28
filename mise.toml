@@ -34,7 +34,7 @@ _.path = ["{{config_root}}/build/bin"]
 
 [tasks."tools:dev"]
 description = "Build structpages-dev (tools/dev) into build/bin, on the path for every task; again only when its code changes."
-sources = ["tools/dev/**/*.go", "tools/dev/go.mod"]
+sources = ["tools/dev/**/*.go", "tools/dev/go.mod", "e2e/*.go"]
 outputs = ["build/bin/structpages-dev"]
 run = "go build -C tools/dev -o {{config_root}}/build/bin/structpages-dev ./cmd/structpages-dev"
 
@@ -761,6 +761,8 @@ run = "structpages-dev report"
 #     -> build:static        -> serve:static
 #     -> build:static-worker -> serve:static-worker
 #   build (all three) -> bench:dynamic -> bench:static -> bench:static-worker -> bench (the report)
+# todo also builds its Worker three more ways, each without one or both of structpages-workers' switches,
+# and times each after bench:static-worker, so its report shows what each switch saves.
 # Builds go in examples/todo/build/ (gitignored).
 # `mise tasks deps example:todo:serve:static` prints a chain.
 # The serve tasks have raw = true: mise hands them the terminal, as typing the command yourself does, so the server's
@@ -848,9 +850,27 @@ dir = "examples/todo"
 raw = true
 run = "structpages-dev serve static-worker"
 
+[tasks."example:todo:build:static-worker-plain"]
+description = "todo: build its Worker as TinyGo ships (no starting heap, no collector patch), into build/static-worker-plain/, to measure."
+depends = ["example:todo:generate"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker-plain -heap 0 -gcpatch=false"
+
+[tasks."example:todo:build:static-worker-heap"]
+description = "todo: build its Worker with the 8 MB starting heap only, into build/static-worker-heap/, to measure."
+depends = ["example:todo:generate"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker-heap -gcpatch=false"
+
+[tasks."example:todo:build:static-worker-gcpatch"]
+description = "todo: build its Worker with the collector patch only, into build/static-worker-gcpatch/, to measure."
+depends = ["example:todo:generate"]
+dir = "examples/todo"
+run = "go tool structpages-workers -o build/static-worker-gcpatch -heap 0"
+
 [tasks."example:todo:build"]
-description = "todo: build it all three ways."
-depends = ["example:todo:build:dynamic", "example:todo:build:static", "example:todo:build:static-worker"]
+description = "todo: build it all three ways, and its Worker's three variants."
+depends = ["example:todo:build:dynamic", "example:todo:build:static", "example:todo:build:static-worker", "example:todo:build:static-worker-plain", "example:todo:build:static-worker-heap", "example:todo:build:static-worker-gcpatch"]
 
 # The bench tasks time one way at a time, after every build: wait_for waits for a task only if it is running, so
 # bench:static alone runs just itself.
@@ -876,9 +896,30 @@ wait_for = ["example:todo:build", "example:todo:bench:static"]
 dir = "examples/todo"
 run = "structpages-dev bench static-worker"
 
+[tasks."example:todo:bench:static-worker-plain"]
+description = "todo: time its Worker as TinyGo ships (no starting heap, no collector patch): served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-plain", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-plain"
+
+[tasks."example:todo:bench:static-worker-heap"]
+description = "todo: time its Worker with the 8 MB starting heap only: served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-heap", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker-plain"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-heap"
+
+[tasks."example:todo:bench:static-worker-gcpatch"]
+description = "todo: time its Worker with the collector patch only: served and started, into build/bench/."
+depends = ["example:todo:build:static-worker-gcpatch", "tools:dev"]
+wait_for = ["example:todo:build", "example:todo:bench:static-worker-heap"]
+dir = "examples/todo"
+run = "structpages-dev bench static-worker static-worker-gcpatch"
+
 [tasks."example:todo:bench"]
 description = "todo: time it all three ways, one at a time, and compare them into BENCH_GENERATED.md."
-depends = ["example:todo:build", "example:todo:bench:dynamic", "example:todo:bench:static", "example:todo:bench:static-worker"]
+depends = ["example:todo:build", "example:todo:bench:dynamic", "example:todo:bench:static", "example:todo:bench:static-worker", "example:todo:bench:static-worker-plain", "example:todo:bench:static-worker-heap", "example:todo:bench:static-worker-gcpatch"]
 dir = "examples/todo"
 run = "structpages-dev report"
 

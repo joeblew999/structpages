@@ -52,6 +52,19 @@ In order, it writes workers-go's glue (`wasm_exec.js` and `runtime.mjs`, from `w
 `config.capnp` serving on `:8080`, then `app.wasm` (`tinygo build -target wasm -no-debug`). In this repo,
 `mise run example:todo:serve:static-worker` builds `examples/todo` that way into `build/static-worker/` and serves it.
 
+Two switches make a request cheaper, both on by default:
+
+- **`-gcpatch`**: TinyGo's runtime runs a full garbage collection whenever its scheduler goes idle once 32 finalizers
+  were registered. Every JavaScript value Go holds registers one, and a Worker goes idle at every await, so it
+  collects on every request ([tinygo#5800](https://github.com/tinygo-org/tinygo/issues/5800)). `structpages-workers`
+  builds with a copy of TinyGo's runtime that has that threshold off; the collector still runs when the heap is full.
+  Your TinyGo install isn't touched. On `examples/todo` in workerd it cuts the CPU per request by about 80%
+  ([its BENCH_GENERATED.md](../examples/todo/BENCH_GENERATED.md)). `-gcpatch=false` builds with TinyGo as it ships.
+- **`-heap`**: the WebAssembly's starting heap, in MB (default 8; `-heap 0` is TinyGo's own), so an ordinary request
+  doesn't need a collection to find room.
+
+`build/build.txt` says which a build used.
+
 ## When TinyGo catches up
 
 Two things exist for TinyGo's gaps, each with a comment saying how to remove it:

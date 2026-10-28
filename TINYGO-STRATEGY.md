@@ -86,6 +86,12 @@ Apple M2 Pro:
 - **A real page** (`mise run bench:examples`, into [examples/todo/BENCH_GENERATED.md](./examples/todo/BENCH_GENERATED.md)):
   `todo`'s `GET /` takes 9.6µs with reflection, **7.4µs generated (23% faster, a fifth fewer allocations)**, and
   30µs under TinyGo.
+- **As a Worker in workerd**, what Cloudflare bills is the server's CPU per request: `todo`'s `GET /` took about 2.5 ms
+  of it as TinyGo ships, because TinyGo's runtime collected garbage at every await ([tinygo#5800](https://github.com/tinygo-org/tinygo/issues/5800)).
+  `structpages-workers` now builds with that patched out, as charter does: about 0.43 ms, 82% less. An 8 MB starting
+  heap alone changes nothing measurable. The remaining gap to the 34µs in-process is the trip into and out of the
+  Worker (workerd, the JavaScript glue, workers-go's request conversion); fewer crossings between JavaScript and Go,
+  and runtimes started while the module loads (a cold start is about 40 ms), are the next things to measure.
 
 **Generator gaps** (`generator_gaps_test.go`: one test per app pattern, run all three ways by the suite; reflection's
 answer is the one the other two must give):

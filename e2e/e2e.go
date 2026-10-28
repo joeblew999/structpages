@@ -16,10 +16,13 @@
 // change in what the app answers. As -update is a flag of its own, go test
 // doesn't cache the run, so it records every time.
 //
-// Bench times the requests in that file that only read (its GETs), one
-// sub-benchmark each, so the three ways can be compared per request:
+// Bench times the requests in that file that only read (its GETs), Reads,
+// in-process, one sub-benchmark each, so the three ways can be compared per
+// request:
 //
 //	func BenchmarkE2E(b *testing.B) { e2e.Bench(b, handler(), "testdata/e2e.generated.txt") }
+//
+// Reads also gives them to a client timing the app as served.
 package e2e
 
 import (
@@ -40,11 +43,6 @@ import (
 
 // update makes Crawl record the responses instead of comparing with them.
 var update = flag.Bool("update", false, "e2e: record the responses into the file instead of comparing with it")
-
-// URLEnv set to an app's address (http://localhost:8080) makes Bench send its
-// requests there instead of to the handler: to time the app as served, in
-// workerd for a TinyGo build.
-const URLEnv = "E2E_URL"
 
 // maxRequests stops a crawl that keeps finding new URLs.
 const maxRequests = 500
@@ -118,26 +116,49 @@ func Crawl(t testing.TB, h http.Handler, file string) {
 // iteration different, so they are left out.
 func Bench(b *testing.B, h http.Handler, file string) {
 	b.Helper()
-	if u := os.Getenv(URLEnv); u != "" {
-		h = remote(b, u)
+	reads, err := Reads(file)
+	if err != nil {
+		b.Fatal(err)
 	}
+	for _, r := range reads {
+		b.Run(r.Name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				serve(h, r.request)
+			}
+		})
+	}
+}
+
+// Read is a request in a recording that only reads: a GET.
+type Read struct {
+	// Name is Bench's name for it: GET_items, or GET_items_htmx for an htmx
+	// partial.
+	Name string
+	// Path is its path and query, and Header the request headers it is sent
+	// with: htmx's, for a partial.
+	Path   string
+	Header http.Header
+	request
+}
+
+// Reads returns the requests in file that only read (its GETs), in order:
+// what Bench times.
+func Reads(file string) ([]Read, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
-		b.Fatalf("e2e: %v; record it first: go test -update", err)
+		return nil, fmt.Errorf("e2e: %w; record it first: go test -update", err)
 	}
+	var reads []Read
 	for _, s := range sections(data) {
 		line, _, _ := strings.Cut(s, "\n")
 		req, ok := parseRequest(line)
 		if !ok || req.method != http.MethodGet {
 			continue
 		}
-		b.Run(benchName(req), func(b *testing.B) {
-			b.ReportAllocs()
-			for range b.N {
-				serve(h, req)
-			}
-		})
+		reads = append(reads, Read{Name: benchName(req), Path: req.path, Header: newRequest(req).Header, request: req})
 	}
+	return reads, nil
 }
 
 // parseRequest reads a request back from its String form.
@@ -167,6 +188,14 @@ func benchName(r request) string {
 }
 
 func serve(h http.Handler, req request) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, newRequest(req))
+	return rec
+}
+
+// newRequest is req as an http.Request: a form sent empty, and htmx's
+// headers for a partial.
+func newRequest(req request) *http.Request {
 	var r *http.Request
 	switch req.method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch:
@@ -182,9 +211,7 @@ func serve(h http.Handler, req request) *httptest.ResponseRecorder {
 	if req.target != "" {
 		r.Header.Set("HX-Target", req.target)
 	}
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, r)
-	return rec
+	return r
 }
 
 var (

@@ -27,7 +27,7 @@ go get -tool github.com/jackielii/structpages/tools/static/cmd/structpages-stati
 go tool structpages-static generate ./...
 ```
 
-It writes `structpages.generated.go` into each package that declares pages, standalone components or request-arg
+It writes `structpages_static.generated.go` into each package that declares pages, standalone components or request-arg
 providers, next to them: generated code can only name a package's unexported types from inside that package. Only
 the static builds compile it (`//go:build tinygo || structpages_static`), so the dynamic build ignores it.
 
@@ -42,7 +42,7 @@ the static builds compile it (`//go:build tinygo || structpages_static`), so the
   page fails when it uses it. An end-to-end test run the static way catches that.
 - If some files build only under TinyGo, or never under it, pass `-tags tinygo` so the code matches what TinyGo
   compiles.
-- `-test` also writes `structpages.generated_test.go` for what your `_test.go` files declare.
+- `-test` also writes `structpages_static.generated_test.go` for what your `_test.go` files declare.
 
 ## Build and test with it
 

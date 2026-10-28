@@ -30,7 +30,7 @@ implementations, picked by build tag:
 
 - `methods_dynamic.go` (dynamic): `reflect`, exactly as before.
 - `methods_static.go` (static and static-worker): what `structpages-static generate` (`tools/static`) generates. It writes
-  `structpages.generated.go` into each package with pages, next to the pages: generated code can only name a
+  `structpages_static.generated.go` into each package with pages, next to the pages: generated code can only name a
   package's unexported types from inside that package, as with gsx's `.x.go`. The files only build with the tag or
   under TinyGo, so the dynamic build ignores them whether they exist or not.
 

@@ -7,9 +7,9 @@
 //
 // For each package (default ./...) that declares page types, standalone
 // components or request-arg functions, it writes
-// structpages.generated.go, built only under TinyGo or the
+// structpages_static.generated.go, built only under TinyGo or the
 // structpages_static build tag. With -test it also writes the code for
-// what the package's tests declare (structpages.generated_test.go).
+// what the package's tests declare (structpages_static.generated_test.go).
 // Run it again whenever a page's methods change; stale generated code fails
 // at Mount.
 // structpages' methods_static.go says why TinyGo needs this, and when it
@@ -150,12 +150,12 @@ func coveredFiles(p *packages.Package) (files map[string]bool, out string) {
 		return nil, ""
 	}
 	// The name says the file is generated; tests' code still ends in _test.go.
-	name := "structpages.generated.go"
+	name := "structpages_static.generated.go"
 	switch {
 	case inTest && strings.HasSuffix(p.Name, "_test"):
-		name = "structpages_external.generated_test.go"
+		name = "structpages_static_external.generated_test.go"
 	case inTest:
-		name = "structpages.generated_test.go"
+		name = "structpages_static.generated_test.go"
 	}
 	return files, filepath.Join(filepath.Dir(p.GoFiles[0]), name)
 }

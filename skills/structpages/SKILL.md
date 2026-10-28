@@ -499,7 +499,7 @@ call methods or name a function. `structpages-static generate` generates it; pag
 
 ```shell
 go get -tool github.com/jackielii/structpages/tools/static/cmd/structpages-static@latest
-go tool structpages-static generate ./...              # writes structpages.generated.go in each package with pages
+go tool structpages-static generate ./...              # writes structpages_static.generated.go in each package with pages
 go tool structpages-static generate -tags tinygo ./... # when some files build only under TinyGo, or never under it
 ```
 
@@ -511,7 +511,7 @@ go tool structpages-static generate -tags tinygo ./... # when some files build o
   page uses it, then fails. Either way: regenerate, not edit.
 - Generate with the build's own tags: code written for one set of files doesn't compile against another.
   `-test` adds what `_test.go` files declare, for `go test -tags structpages_static` or `tinygo test`.
-- Never edit `structpages.generated.go`. Commit it like gsx's `.x.go`, or generate it in the build.
+- Never edit `structpages_static.generated.go`. Commit it like gsx's `.x.go`, or generate it in the build.
 - A generic page type gets code for each instantiation the app uses (`listPage[string]` in a route); one used
   only inside generic code gets none, and a warning.
 - Function literals can't be named by generated code: pass `ID` and `RenderTarget.Is` declared methods or

@@ -7,7 +7,7 @@
 #   static-worker  a Cloudflare Worker: TinyGo WebAssembly, static too
 #
 # THE ORDER. Some files are made from others, so an example's steps run in an order, each reading what the one
-# before wrote: 1 gsx (.gsx -> .x.go), 2 structpages (structpages-static generate -> structpages.generated.go), 3 record (the e2e test
+# before wrote: 1 gsx (.gsx -> .x.go), 2 structpages (structpages-static generate -> structpages_static.generated.go), 3 record (the e2e test
 # from the dynamic build -> testdata/e2e.generated.txt), 4 test, bench or serve (structpages-dev). examples/todo's
 # section below has each step as its own task (generate:gsx, generate:structpages-static, generate:e2e, then test, bench,
 # serve), each depending on the one before. The other examples' generate tasks
@@ -53,55 +53,55 @@ depends = [
 ]
 
 [tasks."example:blog:generate"]
-description = "examples/blog's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+description = "examples/blog's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes."
 run = [
   "go -C examples/blog tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.structpages_static}} -C {{config_root}}/examples/blog -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/blog -test ./...", # 2. -> structpages_static.generated.go
 ]
 
 [tasks."example:html-template:generate"]
-description = "examples/html-template's generated file: structpages.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
+description = "examples/html-template's generated file: structpages_static.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
 run = [
-  "{{vars.structpages_static}} -C {{config_root}}/examples/html-template -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/html-template -test ./...", # 2. -> structpages_static.generated.go
 ]
 
 [tasks."example:htmx:generate"]
-description = "examples/htmx's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+description = "examples/htmx's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes."
 run = [
   "go -C examples/htmx tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.structpages_static}} -C {{config_root}}/examples/htmx -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/htmx -test ./...", # 2. -> structpages_static.generated.go
 ]
 
 [tasks."example:htmx-render-target:generate"]
-description = "examples/htmx-render-target's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+description = "examples/htmx-render-target's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes."
 run = [
   "go -C examples/htmx-render-target tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.structpages_static}} -C {{config_root}}/examples/htmx-render-target -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/htmx-render-target -test ./...", # 2. -> structpages_static.generated.go
 ]
 
 [tasks."example:lint-misuse:generate"]
-description = "examples/lint-misuse's generated files, in order: .x.go, then structpages.generated.go. Commit what changes. Never built the static way (its tests check the linter), but made like every example's."
+description = "examples/lint-misuse's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes. Never built the static way (its tests check the linter), but made like every example's."
 run = [
   "go -C examples/lint-misuse tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.structpages_static}} -C {{config_root}}/examples/lint-misuse -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/lint-misuse -test ./...", # 2. -> structpages_static.generated.go
 ]
 
 [tasks."example:simple:generate"]
-description = "examples/simple's generated files, in order: .x.go, then structpages.generated.go. Commit what changes."
+description = "examples/simple's generated files, in order: .x.go, then structpages_static.generated.go. Commit what changes."
 run = [
   "go -C examples/simple tool gsx generate -q -no-cache .",      # 1. .gsx -> .x.go
-  "{{vars.structpages_static}} -C {{config_root}}/examples/simple -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/simple -test ./...", # 2. -> structpages_static.generated.go
 ]
 
 [tasks."example:url-validation:generate"]
-description = "examples/url-validation's generated file: structpages.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
+description = "examples/url-validation's generated file: structpages_static.generated.go (it uses no gsx, and has no e2e test yet). Commit what changes."
 run = [
-  "{{vars.structpages_static}} -C {{config_root}}/examples/url-validation -test ./...", # 2. -> structpages.generated.go
+  "{{vars.structpages_static}} -C {{config_root}}/examples/url-validation -test ./...", # 2. -> structpages_static.generated.go
 ]
 
 [tasks."generated:check"]
 description = """Every generate task, then fail if a generated file the examples commit (.x.go, \
-structpages.generated.go, testdata/e2e.generated.txt) changed or is new and isn't added to git: commit it with the code \
+structpages_static.generated.go, testdata/e2e.generated.txt) changed or is new and isn't added to git: commit it with the code \
 it comes from. CI checks the same on a fresh checkout."""
 depends = ["generate", "examples:generate"]
 run = '''
@@ -126,7 +126,7 @@ dir = "examples/todo"
 run = "go tool gsx generate"
 
 [tasks."example:todo:generate:structpages-static"]
-description = "todo: structpages-static generate makes structpages.generated.go."
+description = "todo: structpages-static generate makes structpages_static.generated.go."
 depends = ["example:todo:generate:gsx"]
 dir = "examples/todo"
 run = "go tool structpages-static generate"

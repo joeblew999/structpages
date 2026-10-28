@@ -5,7 +5,7 @@
 // toolchain with the structpages_static build tag.
 //
 // structpages-static generate writes a file into each package with pages
-// (structpages.generated.go) that fills it in at init, and structpages reads
+// (structpages_static.generated.go) that fills it in at init, and structpages reads
 // it there instead of reflect. Nothing here is meant to be written by hand;
 // see the docs on generated code, and structpages' methods_static.go for
 // when TinyGo needs it no more.

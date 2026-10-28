@@ -228,7 +228,7 @@ jobs:
         run: |
           go run -C ../../tools/static ./cmd/structpages-static generate -C "$PWD" -test ./...
           if [ -n "$(git status --porcelain .)" ]; then
-            echo "::error::committed structpages.generated.go files are stale — run mise run example:${{ matrix.example }}:generate and commit"
+            echo "::error::committed structpages_static.generated.go files are stale — run mise run example:${{ matrix.example }}:generate and commit"
             git status --porcelain .
             git diff .
             exit 1
